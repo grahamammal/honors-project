@@ -10,7 +10,6 @@ library(dplyr)
 library(ggplot2)
 library(here)
 library(ngspatial)
-library(fields)
 library(MASS)
 library(broom)
 library(spaMM)
@@ -18,7 +17,7 @@ library(Rcpp)
 
 
 sourceCpp(here("Code", "RSRcode", "phiCfast.cpp"))
-source(here("Code", "RSRcode", "spatialPoisson.r"))
+undsource(here("Code", "RSRcode", "spatialPoisson.r"))
 
 
 

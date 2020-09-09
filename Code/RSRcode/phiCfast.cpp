@@ -8,11 +8,13 @@
 //#include "cublas_v2.h"
 #include <Rmath.h>
 #include <Rinternals.h>
-// #include <R_ext/Linpack.h>
-// #include <R_ext/Lapack.h>
-// #include <R_ext/BLAS.h>
+#include <R_ext/Linpack.h>
+#include <R_ext/Lapack.h>
+#include <R_ext/BLAS.h>
+#include <lapacke.h>
+#include <cblas.h>
 //#include <omp.h>
-//#include <mkl.h>
+// #include <mkl.h>
 //#include <mkl_lapacke.h>
 //#include <mkl_blas.h>
 //#include <Accelerate/Accelerate.h>
@@ -246,7 +248,7 @@ extern "C" {
       }
     }
     
-    dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
+    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
     n, r, n, 1.0 , K, n, omega, n, 0.0 ,Komega, n);	 // n*r mm multiplication
     
     
@@ -260,7 +262,7 @@ extern "C" {
     int info;
     
     lwork = -1;
-    F77_NAME(dgesdd)("O", &n, &r, Komega, &n, d, u, &n, VT, &r, &wkopt, &lwork, iwork, &info);
+    LAPACK_dgesdd("O", &n, &r, Komega, &n, d, u, &n, VT, &r, &wkopt, &lwork, iwork, &info);
     lwork = (int) wkopt;
     work = (double*) R_alloc(lwork, sizeof(double));
     F77_NAME(dgesdd)("O", &n, &r, Komega, &n, d, u, &n, VT, &r, work, &lwork, iwork, &info);
