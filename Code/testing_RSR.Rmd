@@ -14,7 +14,10 @@ library(fields)
 library(MASS)
 library(broom)
 library(spaMM)
+library(Rcpp)
 
+
+sourceCpp(here("Code", "RSRcode", "phiCfast.cpp"))
 source(here("Code", "RSRcode", "spatialPoisson.r"))
 
 
@@ -88,7 +91,7 @@ matern_covariance2 <- Matern(h, range = phi, phi = sigma2, smoothness = nu)
 
 W <- mvrnorm(mu = rep(0, n), Sigma = matern_covariance)
 
-epsilon <- rnorm(n, 0, tau2)
+epsilon <- rnorm(n, 0, sqrt(tau2))
 
 y <- x1 + x2 + W + epsilon
 

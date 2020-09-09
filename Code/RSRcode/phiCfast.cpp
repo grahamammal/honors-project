@@ -16,8 +16,10 @@
 //#include <mkl_lapacke.h>
 //#include <mkl_blas.h>
 //#include <Accelerate/Accelerate.h>
-#include <vecLib/clapack.h>
-#include <vecLib/cblas.h>
+#include <RcppArmadillo.h>
+// [[Rcpp::depends(RcppArmadillo)]]
+using namespace Rcpp;
+using namespace arma;
 
 #define pi 3.14159265358979323846
 
@@ -209,6 +211,7 @@ extern "C" {
   
   // dyn.load(paste0(sourceDir,"phiC.so"))
   // .Call("rp",0.2,coords,as.integer(n),as.integer(r),2.5,as.integer(num))
+  // [[Rcpp::export]]
   SEXP rp(SEXP phi_r, SEXP coords_r, SEXP n_r, SEXP r_r, SEXP nu_r, SEXP num_r){
     
     int i,j,k;
@@ -239,11 +242,11 @@ extern "C" {
     
     for(i = 0; i < n; i++){
       for(j = 0; j < r; j++){
-        omega[n*j+i] = rnorm(0,sd0);
+        omega[n*j+i] = as<double>(rnorm(1, 0,sd0));
       }
     }
     
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
+    dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
     n, r, n, 1.0 , K, n, omega, n, 0.0 ,Komega, n);	 // n*r mm multiplication
     
     
