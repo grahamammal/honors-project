@@ -333,40 +333,20 @@ List rp(double phi_r, // phi_starting
   
 }
 
-// // matrix multiplication nxn *nxr
-// NumericMatrix mmC(SEXP A_r,  SEXP B_r, SEXP n_r, SEXP b_r,SEXP num_r){
-//   int i,j;
-//   double alpha, beta;
-//   int n = INTEGER(n_r)[0];
-//   int b = INTEGER(b_r)[0];	
-//   int num = INTEGER(num_r)[0];
-//   double *A = REAL(A_r);
-//   double *B = REAL(B_r);
-//   double sum;
-//   alpha = 1.0; beta = 0.0;
-//   
-//   SEXP Cfoo;
-//   Cfoo = NumericMatrix(n, b);
-//   
-//   //double *C = (double *)malloc( n*b*sizeof( double ), 64 );
-//   double *C = (double *)malloc( n*b*sizeof( double ) );
-//   //omp_set_num_threads(num);
-//   
-//   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, 
-//   n, b, n, alpha, A, n, B, n, beta,C, n);	
-//   
-//   #pragma omp parallel shared(C,Cfoo,n,b) private(i, j)
-//   {
-//     
-//     #pragma omp for schedule(static)        	
-//     for(i = 0; i < n; i++){
-//       for(j = 0; j < b; j++){
-//         REAL(Cfoo)[n*j+i] = C[n*j+i] ;
-//       }
-//     }
-//   }
-//   
-//   free(C);
-//   return(Cfoo);
-// }
+// matrix multiplication nxn *nxr
+// [[Rcpp::export]]
+mat mmC(mat A,  mat B, int n, int b, int num){
+  int i,j;
+  double alpha, beta;
+  double sum;
+  alpha = 1.0; beta = 0.0;
+
+  //double *C = (double *)malloc( n*b*sizeof( double ), 64 );
+  mat C = mat(n, b, fill::none);
+  //omp_set_num_threads(num);
+
+  C = A * B;
+
+  return(C);
+}
 

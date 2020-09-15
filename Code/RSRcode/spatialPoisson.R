@@ -40,7 +40,7 @@ poi_gp_arrpfit <- function(O=obs,
   }
   
   phi.lf <- function(phi){  
-    K1 = .Call("rp",phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(core)) # C++ function for approximating eigenvectors
+    K1 = rp(phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(core)) # C++ function for approximating eigenvectors
     K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
     d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
     
@@ -50,7 +50,7 @@ poi_gp_arrpfit <- function(O=obs,
     signdiag = as.logical(1-signdiag)
     u[,signdiag] = -u[,signdiag]
     
-    U <- .Call("mmC",PPERP,u,as.integer(n),as.integer(rank),as.integer(core)) # gives PPERP%*%u restrict random effect to be orthogonal to fix effect  
+    U <- mmC(PPERP,u,as.integer(n),as.integer(rank),as.integer(core)) # gives PPERP%*%u restrict random effect to be orthogonal to fix effect  
     z <- xbeta+ U %*% (sqrt(d)*etaParams) # U is from random projection
     foo2 <- crossprod(etaParams,etaParams)
     lr <- (
@@ -82,11 +82,12 @@ poi_gp_arrpfit <- function(O=obs,
   accept_s <- matrix(NA,ncol=nParams,nrow=n.batch)
   accept_w <- matrix(NA,ncol=rank,nrow=n.batch)
   
-  print(rk)
-  
+  print(sParams)
+  print(phiindx)
+  print(sParams[phiindx])
   est.time  <- proc.time() 
   # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm. 
-  K = .Call("rp",
+  K = rp(
             sParams[phiindx], # single number, phi in starting param list
             coords, #literally x,y coords of obs
             as.integer(n), # number if interations (batchlength)
@@ -97,10 +98,12 @@ poi_gp_arrpfit <- function(O=obs,
   est.time  <-proc.time() - est.time
   cat("Estimated time (hrs):",niter*2*est.time[3]/3600 ,"\n")
   
+  print("here")
+  
   K.rp = list(d = K[[1]],u = K[[2]][,1:rank])
   d <- (K.rp$d[1:rank])^2 # approximated eigenvalues 
   U1<- U <- u <- K.rp$u[,1:rank] # approximated eigenvectors
-  U <- .Call("mmC",PPERP,U,as.integer(n),as.integer(rank),as.integer(core)) # compute PPERP%*%u restrict random effect to be orthogonal to fix effect
+  U <- mmC(PPERP,U,as.integer(n),as.integer(rank),as.integer(core)) # compute PPERP%*%u restrict random effect to be orthogonal to fix effect
   
   if (is.null(starting[["w"]])){
     etaParams <- rep(0,rank)
@@ -336,5 +339,5 @@ bmmat <- function(x)
 # R wrappers to call cpp function for random projection
 rpcpp<-function(r,coords,phi,nu){ # r is demension selected, K,n is loaded from global environment
   n=nrow(coords)
-  .Call("rp",phi,coords,as.integer(n),as.integer(r),nu,as.integer(1))
+  rp(phi,coords,as.integer(n),as.integer(r),nu,as.integer(1))
 }
