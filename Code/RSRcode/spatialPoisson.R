@@ -1,4 +1,15 @@
-poi_gp_arrpfit <- function(O=obs,coords=coords,X,mul=2,covfn = covfn,adapt=adapt, nu=nu, core = core, starting=starting, tuning=tuning, priors=priors, rank=50){
+poi_gp_arrpfit <- function(O=obs,
+                           coords=coords, #literally the coordinates
+                           X,
+                           mul=2,
+                           covfn = covfn,
+                           adapt=adapt, 
+                           nu=nu, 
+                           core = core, 
+                           starting=starting, 
+                           tuning=tuning, 
+                           priors=priors, 
+                           rank=50){
   ptm <- proc.time()
   p = ncol(X)
   n <-length(O)
@@ -71,8 +82,18 @@ poi_gp_arrpfit <- function(O=obs,coords=coords,X,mul=2,covfn = covfn,adapt=adapt
   accept_s <- matrix(NA,ncol=nParams,nrow=n.batch)
   accept_w <- matrix(NA,ncol=rank,nrow=n.batch)
   
+  print(rk)
+  
   est.time  <- proc.time() 
-  K = .Call("rp",sParams[phiindx],coords,as.integer(n),as.integer(rk),nu,as.integer(core)) # C++ function for approximating eigenvectors
+  # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm. 
+  K = .Call("rp",
+            sParams[phiindx], # single number, phi in starting param list
+            coords, #literally x,y coords of obs
+            as.integer(n), # number if interations (batchlength)
+            as.integer(rk), # rank times mul (what is mul?)
+            nu, #nu as before
+            as.integer(core)# number of cores
+            ) # C++ function for approximating eigenvectors
   est.time  <-proc.time() - est.time
   cat("Estimated time (hrs):",niter*2*est.time[3]/3600 ,"\n")
   
@@ -172,7 +193,7 @@ poi_gp_arrpfit <- function(O=obs,coords=coords,X,mul=2,covfn = covfn,adapt=adapt
       #         } else{
       #           deltastar[j] <- etaParams[j]
       #         }
-      #       }
+      #       }.Call("rp", sParams[phiindx]
       #       wParams <- delta.lfcur$w
       
       # update random effects using multivariate random walk with spherical normal proposal

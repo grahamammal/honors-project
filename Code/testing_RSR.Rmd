@@ -16,10 +16,11 @@ library(spaMM)
 library(fields)
 library(Rcpp)
 
-
+sourceCpp(here("Code", "test_rcpp.cpp"))
 sourceCpp(here("Code", "RSRcode", "phiCfast.cpp"))
-undsource(here("Code", "RSRcode", "spatialPoisson.r"))
 
+source(here("Code", "RSRcode", "spatialPoisson.R"))
+timesTwo(2)
 
 
 data(infant)
@@ -135,11 +136,12 @@ tuning   <- list("beta"=c(sqrt(diag(vcov(linear_model)))),"s2"=0.1,"phi"=0.01,"w
 
 priors   <- list("beta.normal"=c(100),"s2.IG"=c(2,2),"phi.Unif"=c(0.01, 1.5)) # set priors
 
-core = 4
+core = 1
 mul = 2
 rank = 50
+```
 
-
+```{r}
 rsr_fit <- poi_gp_arrpfit(O = y, 
                X = design_matrix,
                coords = cbind(x1, x2), 
