@@ -1,11 +1,3 @@
----
-title: "Testing RSR"
-author: "Ellen Graham"
-date: "9/8/2020"
-output: html_document
----
-
-```{r}
 library(dplyr)
 library(ggplot2)
 library(here)
@@ -16,58 +8,11 @@ library(spaMM)
 library(fields)
 library(Rcpp)
 
-sourceCpp(here("Code", "RSRcode", "phiCfast.cpp"))
-
-source(here("Code", "RSRcode", "spatialPoisson.R"))
-
-
-data(infant)
-```
-
-
-```{r}
-
-
-infant_small <- infant[1:500,]
-
-infant_small$low_weight = infant_small$low_weight / infant_small$births
-Z = infant_small$deaths
-X = cbind(1, infant_small$low_weight, infant_small$black, infant_small$hispanic, infant_small$gini, infant_small$affluence, infant_small$stability)
-data(A)
-
-A_small <- A[1:500, 1:500]
-
-```
-
-takes 23 minutes to run be careful
-
-```{r}
-
-
-set.seed(123456)
-fit = sparse.sglmm(Z ~ X - 1 + offset(log(infant_small$births)), family = poisson, A = A_small, method = "RSR",
-                   tune = list(sigma.s = 0.02), verbose = TRUE)
-summary(fit)
-
-
-fit_lm <- glm(Z ~ X - 1 + offset(log(infant_small$births)), family = poisson)
-summary(fit_lm)
-confint(fit_lm)
-
-fit_sparse.sglmm <- fit
-# these are completley different results from what the Khan paper says we should see!?!?!
-```
+source("../RSRcode/spatialPoisson.R")
 
 
 
 
-
-
-## Attempting to simulate the data from Guan and Haran 2018
-
-
-### Simulate data
-```{r}
 
 n <- 100
 
@@ -95,33 +40,12 @@ epsilon <- rnorm(n, 0, sqrt(tau2))
 y <- x1 + x2 + W + epsilon
 
 sim_data <- tibble(x1 = x1, x2 = x2, W = W, epsilon = epsilon, y = y)
-```
 
-
-```{r}
-sim_data %>% 
-  ggplot() +
-  geom_point(aes(x = x1, y = x2, color = y)) +
-  scale_color_viridis_c()
-
-```
-
-### Begin Fitting Models
-
-```{r}
 linear_model <- lm(y ~ x1 + x2, data = sim_data)
-linear_model %>% 
+linear_model %>%
   tidy(conf.int = TRUE)
-```
 
-```{r}
-sglmm <- fitme(y ~ x1 + x2 + Matern(1|x1 + x2), data = sim_data)
-summary(sglmm)
 
-# again just completley wrong
-```
-
-```{r}
 design_matrix <- model.matrix(~ x1 + x2,
                               data = sim_data)
 
@@ -137,14 +61,12 @@ priors   <- list("beta.normal"=c(100),"s2.IG"=c(2,2),"phi.Unif"=c(0.01, 1.5)) # 
 core = 1
 mul = 2
 rank = 10
-```
 
-```{r}
-source(here("Code", "RSRcode", "spatialPoisson.R"))
+here::here()
 
-rsr_fit <- poi_gp_arrpfit(O = y, 
+rsr_fit <- poi_gp_arrpfit(O = y,
                X = design_matrix,
-               coords = cbind(x1, x2), 
+               coords = cbind(x1, x2),
                covfn = covfn,
                adapt = adapt,
                nu = nu,
@@ -154,6 +76,3 @@ rsr_fit <- poi_gp_arrpfit(O = y,
                core = core,
                mul = mul,
                rank = rank)
-
-```
-

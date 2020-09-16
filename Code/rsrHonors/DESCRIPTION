@@ -1,0 +1,21 @@
+Package: rsrHonors
+Title: What the Package Does (One Line, Title Case)
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Ellen",
+           family = "Graham",
+           role = c("aut", "cre"),
+           email = "ellengraham403@example.com")
+Description: Fits the computationally efficient spatial generalized linear mixed model outlined in https://doi.org/10.1080/10618600.2018.1425625. A time varying component has been added. 
+License: MIT + file LICENSE
+Suggests: 
+    testthat
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.1
+LinkingTo: 
+    Rcpp,
+    RcppArmadillo
+Imports: 
+    Rcpp (>= 1.0.5)
