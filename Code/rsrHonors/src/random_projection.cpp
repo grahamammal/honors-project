@@ -15,7 +15,7 @@ arma::mat makeCov1(arma::mat coords, double phi, int n, int num){
 
   for(i = 0; i < n; i++){
     for(j = i; j < n; j++){
-      dist = sqrt(pow(coords(i,1)-coords(j,1),2) + pow(coords(i,2)-coords(j,2),2));
+      dist = sqrt(pow(coords(i,0)-coords(j,0),2) + pow(coords(i,1)-coords(j,1),1));
       C(i,j) = C(j,i) = (1.0+ oneoverphi*dist + 1.0/3.0*pow(oneoverphi,2)*pow(dist,2))*exp(-1*oneoverphi*dist);
     }
   }
@@ -46,59 +46,42 @@ List rp(double phi_r, // phi_starting
   double phi = phi_r; // cast to double
 
   arma::mat (*covfn) (arma::mat coords, double phi, int n, int num); // allocate create pointer to covariance matrix creating function
-  arma::mat K = arma::mat(n, n, arma::fill::none); // pointer to covariance matrix
-  arma::mat omega = arma::mat(n, r, arma::fill::none); // Make pointer to double matrix of size n*r
-  arma::mat Komega= arma::mat(n, r, arma::fill::none); // Make pointer to double matrix of size n*r
-  arma::mat Kphit = arma::mat(n, r, arma::fill::none); // Make pointer to double matrix of size n*r
+  arma::mat K = arma::mat(n, n); // pointer to covariance matrix
+  arma::mat Omega = arma::mat(n, r); // Make pointer to double matrix of size n*r
+  arma::mat KOmega= arma::mat(n, r); // Make pointer to double matrix of size n*r
+  arma::mat K11 = arma::mat(r, r);
   double ALPHA; // constant, not sure what it does
   ALPHA= 1.0;
 
-  // if(nu==200) covfn = makeCov000; // only for the bird count
-  // if(nu==100) covfn = makeCov00; // only for the binary digit classification
-  // if(nu==19) covfn = makeCovGene; // only for the binary gene classification
-  // if(nu==10) covfn = makeCov0; // for square exponential
-  // if(nu==0.5) covfn = makeCov; // matern
+
+  // Make function to make K
   if(nu==2.5) covfn = makeCov1;// matern
-  // if(nu==1.5) covfn = makeCov15;// matern
+
+
+  // Make K (Covariance matrix of Coords)
   K = covfn(coords ,  phi , n , num ); // K is the covariance matrix
 
+  // Build Omega (random projection matrix
   for(i = 0; i < n; i++){
     for(j = 0; j < r; j++){
-      omega(i,j) = as<double>(rnorm(1, 0, sd0)); // simulate omega used to project into lower dim
+      Omega(i,j) = as<double>(rnorm(1, 0, sd0)); // simulate omega used to project into lower dim
     }
   }
 
-  Komega = K * omega;
+  // Called Phi in paper, last part of step 1 in algo 1
+  KOmega = K * Omega;
 
-  arma::vec d = arma::vec(r, arma::fill::none); //store eigenvalues
-  arma::mat u= arma::mat(n, n, arma::fill::none); // not referenced
-  arma::mat VT= arma::mat(r, r, arma::fill::none); // not used
-  int lwork;
-  double wkopt;
-  double *work;
-  int *iwork = (int*) R_alloc(8*r, sizeof(double));
-  int info;
+  arma::vec d = arma::vec(r); //store eigenvalues
+  arma::mat u= arma::mat(r, r); // not referenced
+  arma::mat VT= arma::mat(r, r); // not used
 
-  lwork = -1;
-  //
-  //
-  //
-  //
-  //
-  //
-  //
-  //
-  svd_econ(u, d, VT, Komega);
+  K11 = KOmega.t() * K * KOmega;
+
+  Rcout << "Before svd\n";
+  svd(u, d, VT, K11, "std");
+  Rcout << "After svd\n";
 
 
-  //Komega is overwritten by the basis phit
-
-  Kphit = K * Komega;
-
-  // cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-  // n, r, n, 1.0 , K, n, Komega, n, 0.0 ,Kphit, n);	 // n*r mm multiplication
-
-  VT = Komega.t() * Kphit;
 
 // Komega transpose * Kphit = rxn * nxr -> phi*K*phit = VT
   // cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
@@ -115,7 +98,7 @@ List rp(double phi_r, // phi_starting
   //                r);
 
 
-  Kphit = arma::solve(VT, Kphit);
+  K11 = arma::solve(VT, K11);
   // matrix solve
   //dtrsm("R", "U", "N", "N", &n, &r, &ALPHA, VT, &r, Kphit, &n);
   // cblas_dtrsm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans,
@@ -127,7 +110,7 @@ List rp(double phi_r, // phi_starting
   arma::mat u_r = arma::mat(n, r, arma::fill::none);
 
 
-  svd_econ(u_r, d_r, VT, Kphit);
+  svd_econ(u_r, d_r, VT, K11);
 // svd Kphit
  // LAPACKE_dgesdd(CblasColMajor,
  //               'S',
@@ -141,6 +124,8 @@ List rp(double phi_r, // phi_starting
  //               VT,
  //               r);
   int nResultListObjs = 2;
+
+
 
 // comment this part for testing
   result = List::create(d_r, u_r);
