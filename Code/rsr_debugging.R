@@ -33,7 +33,9 @@ matern_covariance <- sigma2 * (1 + sqrt(5)*h/phi + 5*h^2 / (3*phi^2)) * exp(-1*s
 
 matern_covariance2 <- fields::Matern(h, range = phi/sqrt(2*nu), phi = sigma2, smoothness = nu)
 
-W <- mvrnorm(mu = rep(0, n), Sigma = matern_covariance)
+W <- mvrnorm(n = 1, mu = rep(0, n), Sigma = matern_covariance)
+
+print(W)
 
 epsilon <- rnorm(n, 0, sqrt(tau2))
 
@@ -62,17 +64,16 @@ core = 1
 mul = 2
 rank = 10
 
-here::here()
 
 rsr_fit <- poi_gp_arrpfit(O = y,
-               X = design_matrix,
-               coords = cbind(x1, x2),
-               covfn = covfn,
-               adapt = adapt,
-               nu = nu,
-               starting = starting,
-               tuning = tuning,
-               priors = priors,
-               core = core,
-               mul = mul,
-               rank = rank)
+                          X = design_matrix,
+                          coords = cbind(x1, x2),
+                          covfn = covfn,
+                          adapt = adapt,
+                          nu = nu,
+                          starting = starting,
+                          tuning = tuning,
+                          priors = priors,
+                          core = core,
+                          mul = mul,
+                          rank = rank)
