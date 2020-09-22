@@ -7,6 +7,7 @@ library(broom)
 library(spaMM)
 library(fields)
 library(Rcpp)
+library(glue)
 
 source("../RSRcode/spatialPoisson.R")
 
