@@ -1,4 +1,5 @@
-#include <RcppArmadillo.h>
+
+#include "random_projection.h"
 // [[Rcpp::depends(RcppArmadillo)]]
 using namespace Rcpp;
 
@@ -10,7 +11,7 @@ arma::mat makeCov1(arma::mat coords, double phi, int n, int num){
   double oneoverphi = sqrt(5)/phi;
   int i,j;
   double dist;
-  arma::mat C = arma::mat(n, n, arma::fill::none);
+  arma::mat C = arma::mat(n, n);
 
 
   for(i = 0; i < n; i++){

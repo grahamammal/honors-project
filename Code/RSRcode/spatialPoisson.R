@@ -127,6 +127,8 @@ poi_gp_arrpfit <- function(O=obs,
       beta.lfcand <- beta.lf(c(betastar))
       lr <- beta.lfcand - beta.lfcur
 
+      print(glue("{betastar}"))
+
       if(log(runif(1)) < lr) {
         sParams[betaindx]<-betastar
         sAccepts[betaindx]<-sAccepts[betaindx]+1
@@ -151,7 +153,6 @@ poi_gp_arrpfit <- function(O=obs,
       }
       lr <- phi.lfcand$lr - phi.lfcur$lr
 
-      print(glue("{log(runif(1)) < lr}"))
       if(log(runif(1)) < lr) {
         sParams[phiindx]<-phistar
         sAccepts[phiindx]<-sAccepts[phiindx]+1

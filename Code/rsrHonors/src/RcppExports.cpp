@@ -38,9 +38,12 @@ BEGIN_RCPP
 END_RCPP
 }
 
+RcppExport SEXP run_testthat_tests();
+
 static const R_CallMethodDef CallEntries[] = {
     {"_rsrHonors_rp", (DL_FUNC) &_rsrHonors_rp, 6},
     {"_rsrHonors_mmC", (DL_FUNC) &_rsrHonors_mmC, 5},
+    {"run_testthat_tests", (DL_FUNC) &run_testthat_tests, 0},
     {NULL, NULL, 0}
 };
 
