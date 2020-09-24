@@ -82,7 +82,9 @@ poi_gp_arrpfit <- function(O=obs,
   accept_s <- matrix(NA,ncol=nParams,nrow=n.batch)
   accept_w <- matrix(NA,ncol=rank,nrow=n.batch)
 
-
+  print(sParams)
+  print(phiindx)
+  print(sParams[phiindx])
   est.time  <- proc.time()
   # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm.
   K = rp(
@@ -124,6 +126,8 @@ poi_gp_arrpfit <- function(O=obs,
       beta.lfcur <- beta.lf(sParams[betaindx])
       beta.lfcand <- beta.lf(c(betastar))
       lr <- beta.lfcand - beta.lfcur
+
+      print(glue("{betastar}"))
 
       if(log(runif(1)) < lr) {
         sParams[betaindx]<-betastar

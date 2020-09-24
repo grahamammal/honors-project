@@ -96,6 +96,8 @@ List rp(double phi_r, // phi_starting
 
 // comment this part for testing
   List result = List::create(d, U);
+
+
   return(result);
 
 // uncomment this part for testing

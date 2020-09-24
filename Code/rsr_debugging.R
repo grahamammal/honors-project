@@ -38,13 +38,15 @@ W <- mvrnorm(n = 1, mu = rep(0, n), Sigma = matern_covariance)
 
 print(W)
 
-epsilon <- rnorm(n, 0, sqrt(tau2))
 
-y <- x1 + x2 + W + epsilon
+y_mean <- exp(x1 + x2 + W)
+y <- rpois(n, y_mean)
 
 sim_data <- tibble(x1 = x1, x2 = x2, W = W, epsilon = epsilon, y = y)
 
-linear_model <- lm(y ~ x1 + x2, data = sim_data)
+linear_model <- glm(y ~ x1 + x2,
+                    data = sim_data,
+                    family = "poisson")
 linear_model %>%
   tidy(conf.int = TRUE)
 
