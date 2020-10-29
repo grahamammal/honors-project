@@ -38,8 +38,16 @@ poi_gp_arrpfit <- function(O=obs,
 
 
 
+  # might be doing gibbs sampler.
+  # Full conditional sounds like gibbs sampler
+  # Might be doing component wise metropolis hastings.
+  #
+
   # log full conditional of beta
   # NOTE: should it be (p*beta.b) instead of (2*beta.b)???
+  #
+  # Estimates fixed effects parameters
+  # lf
   beta.lf <- function(beta){
     z <- X %*% beta + wParams # if rsr, wParams = L%*%eta
     lf <- sum(dpois(O, exp(z), log = TRUE)) - crossprod(beta)/(p*beta.b)
@@ -153,16 +161,20 @@ poi_gp_arrpfit <- function(O=obs,
     for (i in 1:batchlength) {
 
       # block update beta
-      betastar <- rnorm(p,sParams[betaindx],sd = exp(sTunings[betaindx]))
-      beta.lfcur <- beta.lf(sParams[betaindx])
-      beta.lfcand <- beta.lf(c(betastar))
-      lr <- beta.lfcand - beta.lfcur
+      betastar <- rnorm(p, sParams[betaindx], sd = exp(sTunings[betaindx])) # draw for proposed beta params
+      beta.lfcur <- beta.lf(sParams[betaindx]) # log likelihood of current beta params
+      beta.lfcand <- beta.lf(c(betastar)) # log likelihood of proposed beta params
+      lr <- beta.lfcand - beta.lfcur # log likelihood ratio log(proposed_likelihood/current_likelihood)
 
-      if (log(runif(1)) < lr) {
-        sParams[betaindx] <- betastar
-        sAccepts[betaindx] <- sAccepts[betaindx] + 1
-        xbeta <- X %*% sParams[betaindx]
+
+      # this is metropolis hastings step
+      if (log(runif(1)) < lr) { # if likelihood ratio is greater than runif(1), accept
+        sParams[betaindx] <- betastar # update params with new guess
+        sAccepts[betaindx] <- sAccepts[betaindx] + 1 # mark we accepted
+        xbeta <- X %*% sParams[betaindx] # update xbeta, which will be used in next set of estimation
       }
+
+      # project beta guess to be orthoganal to
       AParams = sParams[betaindx] - AP %*% u %*% (sqrt(d)*etaParams) # adjust the random effects to get ARRP
 
       # update phi

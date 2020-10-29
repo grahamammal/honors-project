@@ -1,0 +1,256 @@
+---
+title: "RSR Examples"
+author: "Ellen Graham"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(here)
+library(ngspatial)
+library(MASS)
+library(broom)
+library(spaMM)
+library(Rcpp)
+library(glue)
+library(tidyr)
+
+
+source("RSRcode/spatialPoisson.R")
+library(rsrHonors)
+
+theme_set(theme_minimal())
+```
+
+
+
+Simulate data from $$E(f(Y)) = x_1 + x_2 + W \\ W = Matern(\nu=2.5, \sigma^2 = 1, \phi = 0.2)$$
+
+```{r}
+set.seed(454)
+
+n <- 100
+
+x1 <- runif(n)
+x2 <- runif(n)
+
+nu <- 2.5
+sigma2 <- 1
+phi <- 0.2
+
+tau2 <- 0.1
+
+h <- as.matrix(dist(data.frame(x1 = x1, x2 = x2)))
+
+
+matern_covariance <- fields::Matern(h, range = phi/sqrt(2*nu), phi = sigma2, smoothness = nu)
+
+W <- mvrnorm(n = 1, mu = rep(0, n), Sigma = matern_covariance)
+
+y_mean <- x1 + x2 + W
+
+y_pois <- rpois(n, exp(y_mean))
+y_norm <- rnorm(n, y_mean, sqrt(tau2))
+y_binom <- rbinom(n, 1, exp(y_mean)/(1 + exp(y_mean)))
+
+sim_data <- tibble(x1 = x1, x2 = x2, W = W, 
+                   y_mean = y_mean,
+                   y_pois = y_pois,
+                   y_norm = y_norm,
+                   y_binom = y_binom)
+```
+
+
+Visualize Simulated Data
+
+```{r}
+
+sim_data %>%
+  ggplot() +
+  geom_point(aes(x = x1, y = x2, color = W)) +
+  scale_color_viridis_c(option = "C") +
+  labs(title = "Spatial Effect W")
+
+sim_data %>%
+  ggplot() +
+  geom_point(aes(x = x1, y = x2, color = y_mean)) +
+  scale_color_viridis_c(option = "C") +
+  labs(title = "Outcome Y Mean")
+
+sim_data %>%
+  ggplot() +
+  geom_point(aes(x = x1, y = x2, color = y_norm)) +
+  scale_color_viridis_c(option = "C") +
+  labs(title = "Outcome Y Normal")
+
+sim_data %>%
+  ggplot() +
+  geom_point(aes(x = x1, y = x2, color = y_pois)) +
+  scale_color_viridis_c(option = "C") +
+  labs(title = "Outcome Y Poisson")
+
+sim_data %>%
+  ggplot() +
+  geom_point(aes(x = x1, y = x2, color = y_binom)) +
+  scale_color_viridis_c(option = "C") +
+  labs(title = "Outcome Y Binomial")
+```
+
+General Linear Models
+```{r}
+normal_model <- glm(y_norm ~ x1 + x2,
+                    data = sim_data,
+                    family = "gaussian")
+normal_model %>%
+  tidy(conf.int = TRUE)
+
+poisson_model <- glm(y_pois ~ x1 + x2,
+                    data = sim_data,
+                    family = "poisson")
+poisson_model %>%
+  tidy(conf.int = TRUE)
+
+binomial_model <- glm(y_binom ~ x1 + x2,
+                    data = sim_data,
+                    family = "binomial")
+binomial_model %>%
+  tidy(conf.int = TRUE)
+```
+
+Spatial Generalized Linear Mixed Model
+
+```{r, eval = FALSE}
+sglmm_norm <- fitme(y_norm ~ x1 + x2 + Matern(1|x1 + x2), data = sim_data, family = gaussian)
+summary(sglmm_norm)
+
+sglmm_pois <- fitme(y_pois ~ x1 + x2 + Matern(1|x1 + x2), data = sim_data, family = poisson)
+summary(sglmm_pois)
+
+sglmm_binom <- fitme(y_binom ~ x1 + x2 + Matern(1|x1 + x2), data = sim_data, family = binomial)
+summary(sglmm_binom)
+```
+
+Fit Restricted Random Projections of SGLMM
+
+```{r}
+design_matrix <- model.matrix(~ x1 + x2,
+                              data = sim_data)
+
+covfn <- covfndef(nu)
+adapt <- c("batchlength" = 1e4,
+           "n.batch" = 10) # set Monte Carlo sample size = batchlength*n.batch
+
+starting <- list("beta" = coef(poisson_model),
+                 "s2" = 2,
+                 "phi" = 0.5) # set starting values
+
+tuning   <- list("beta" = c(sqrt(diag(vcov(poisson_model)))),
+                 "s2" = 0.1,
+                 "phi" = 0.01,
+                 "w" = 0.1) # set tuning parameters
+
+priors   <- list("beta.normal" = c(100),
+                 "s2.IG" = c(2,2),
+                 "phi.Unif" = c(0.01, 1.5)) # set priors
+
+core = 1
+mul = 2
+rank = 10
+
+
+rsr_fit <- poi_gp_arrpfit(O = sim_data$y_pois,
+                          X = design_matrix,
+                          coords = cbind(x1, x2),
+                          covfn = covfn,
+                          adapt = adapt,
+                          nu = nu,
+                          starting = starting,
+                          tuning = tuning,
+                          priors = priors,
+                          core = core,
+                          mul = mul,
+                          rank = rank)
+```
+
+```{r}
+rsr_adj <- rsr_fit$arrp.params %>%
+  as_tibble() %>% 
+  rename(intercept = V1, x1 = V2, x2 = V3) %>% 
+  mutate(index = 1:n())
+
+
+rsr_adj %>% 
+  ggplot(aes(x = index, y = intercept)) +
+  geom_line()
+
+rsr_adj %>% 
+  ggplot(aes(x = index, y = x1)) +
+  geom_line()
+
+rsr_adj %>% 
+  ggplot(aes(x = index, y = x2)) +
+  geom_line()
+```
+
+So these chains aren't great, but they're not awful either? Why are the estimates so wrong?
+
+```{r}
+rsr_unadj <- rsr_fit$p.params %>% 
+  as_tibble() %>% 
+  rename(intercept = V1, x1 = V2, x2 = V3, sigma2 = V4, phi = V5) %>% 
+  mutate(index = 1:n())
+
+
+rsr_unadj %>% 
+  ggplot(aes(x = index, y = intercept)) +
+  geom_line()
+
+rsr_unadj %>% 
+  ggplot(aes(x = index, y = x1)) +
+  geom_line()
+
+rsr_unadj %>% 
+  ggplot(aes(x = index, y = x2)) +
+  geom_line()
+
+rsr_unadj %>% 
+  ggplot(aes(x = index, y = sigma2)) +
+  geom_line()
+
+rsr_unadj %>% 
+  ggplot(aes(x = index, y = phi)) +
+  geom_line()
+```
+
+```{r}
+rsr_adj %>% 
+  summarize(across(intercept:x2, median))
+
+rsr_unadj %>% 
+  summarize(across(intercept:phi, median))
+```
+
+
+The unadjusted looks way better. I guess we only need to worry about the unadjusted chains? 
+
+
+```{r}
+rsr_w <- rsr_fit$w.params %>% 
+  as_tibble() %>% 
+  head(10000) %>% 
+  mutate(index = 1:n()) %>% 
+  pivot_longer(V1:V100, names_to = "random_effects",
+               values_to = "estimate")
+
+rsr_w %>% 
+  ggplot(aes(x = index, y = estimate, group = random_effects)) +
+  geom_line()
+```
+
+

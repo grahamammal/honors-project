@@ -1,0 +1,36 @@
+---
+title: "Bird Data Exploration"
+author: "Ellen Graham"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(dplyr)
+library(readr)
+library(purrr)
+```
+
+
+These data come from the Breeding Bird Survey, found at: [](https://doi.org/10.5066/F7W0944J). I will be doing House Finches (Carpodacus mexicanus AOU 05195) from 1966-2000 and Carolina Wren (Thryothorus ludovicanus, AOU 07180) from 1967-2014. This is following the book Spatiotemporal Statistics in R. Data were collected ~yearly along routes. I believe I'll need to impute data for missing years. 
+
+```{r, eval = FALSE}
+file_names <- list.files("../Data/States/States", pattern = "*.zip") 
+  
+
+csv_paths <- glue("../Data/States/States/{file_names}") %>% 
+  map(unzip, exdir = "../Data/States")
+```
+
+```{r}
+csv_names <- list.files("../Data/States", pattern = "*.csv") 
+
+
+glue("../Data/States/{csv_names}") %>% 
+  map(read_csv)
+```
+

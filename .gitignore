@@ -43,3 +43,6 @@ vignettes/*.pdf
 anRpackage/
 
 RSRdll/
+
+# Keep from adding large data files
+Data/
