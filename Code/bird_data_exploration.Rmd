@@ -13,10 +13,13 @@ knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
 library(readr)
 library(purrr)
+library(glue)
+library(sf)
+library(rnaturalearth)
 ```
 
 
-These data come from the Breeding Bird Survey, found at: [](https://doi.org/10.5066/F7W0944J). I will be doing House Finches (Carpodacus mexicanus AOU 05195) from 1966-2000 and Carolina Wren (Thryothorus ludovicanus, AOU 07180) from 1967-2014. This is following the book Spatiotemporal Statistics in R. Data were collected ~yearly along routes. I believe I'll need to impute data for missing years. 
+These data come from the Breeding Bird Survey, found at: [](https://doi.org/10.5066/F7W0944J). I will be doing House Finches (Haemorhous mexicanus AOU 05195) from 1966-2000 and Carolina Wren (Thryothorus ludovicanus, AOU 07180) from 1967-2014. This is following the book Spatiotemporal Statistics in R. Data were collected ~yearly along routes. I believe I'll need to impute data for missing years. 
 
 ```{r, eval = FALSE}
 file_names <- list.files("../Data/States/States", pattern = "*.zip") 
@@ -26,11 +29,70 @@ csv_paths <- glue("../Data/States/States/{file_names}") %>%
   map(unzip, exdir = "../Data/States")
 ```
 
-```{r}
+```{r, eval = FALSE}
 csv_names <- list.files("../Data/States", pattern = "*.csv") 
 
 
-glue("../Data/States/{csv_names}") %>% 
-  map(read_csv)
+bird_data_full <- glue("../Data/States/{csv_names}") %>% 
+  map(read_csv, col_types = paste0(rep("d", 13), collapse = "")) %>% 
+  bind_rows()
+```
+
+```{r, eval = FALSE}
+
+
+house_finch <- bird_data_full %>% 
+  filter(Aou == 05190)
+
+carolina_wren <- bird_data_full %>% 
+  filter(Aou == 07180)
+
+write_csv(house_finch, "../Data/house_finch.csv")
+
+write_csv(carolina_wren, "../Data/carolina_wren.csv")
+```
+
+
+```{r}
+house_finch <- read_csv("../Data/house_finch.csv")
+carolina_wren <- read_csv("../Data/carolina_wren.csv")
+```
+
+
+```{r}
+routes <- read_csv("../Data/Routes/routes.csv", col_types = "dddcdddddddd")
+```
+
+```{r}
+house_finch_sp <- house_finch %>% 
+  left_join(routes, by = c("countrynum", "statenum", "Route")) %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)
+
+carolina_wren_sp <- carolina_wren %>% 
+  left_join(routes, by = c("countrynum", "statenum", "Route")) %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) 
+
+```
+
+```{r}
+house_finch_sp %>% 
+  filter(Year == 1992) %>% 
+  ggplot() +
+  geom_sf(aes(size = SpeciesTotal,
+              color = SpeciesTotal), 
+          alpha = 0.3) +
+  scale_color_viridis_c() +
+  scale_size(range = c(0.5, 10))
+```
+
+```{r}
+carolina_wren_sp %>% 
+  filter(Year == 1990) %>% 
+  ggplot() +
+  geom_sf(aes(size = SpeciesTotal,
+              color = SpeciesTotal), 
+          alpha = 0.3) +
+  scale_color_viridis_c()+
+  scale_size(range = c(0.5, 10))
 ```
 

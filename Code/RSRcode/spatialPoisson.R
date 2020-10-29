@@ -47,7 +47,7 @@ poi_gp_arrpfit <- function(O=obs,
   # NOTE: should it be (p*beta.b) instead of (2*beta.b)???
   #
   # Estimates fixed effects parameters
-  # lf
+  # lf: look at notes
   beta.lf <- function(beta){
     z <- X %*% beta + wParams # if rsr, wParams = L%*%eta
     lf <- sum(dpois(O, exp(z), log = TRUE)) - crossprod(beta)/(p*beta.b)

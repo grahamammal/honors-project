@@ -144,7 +144,7 @@ design_matrix <- model.matrix(~ x1 + x2,
 
 covfn <- covfndef(nu)
 adapt <- c("batchlength" = 1e4,
-           "n.batch" = 10) # set Monte Carlo sample size = batchlength*n.batch
+           "n.batch" = 1) # set Monte Carlo sample size = batchlength*n.batch
 
 starting <- list("beta" = coef(poisson_model),
                  "s2" = 2,
