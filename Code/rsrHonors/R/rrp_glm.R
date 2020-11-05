@@ -20,7 +20,7 @@ rrp_glm <- function(fixed,
   # Figure out how to interpret the formula fixed fixed
   model_frame <- lm(fixed, data = data, method = "model.frame")
   X <- model.matrix(fixed, data = model_frame)
-  y <- model.response(model_frame)
+  O <- model.response(model_frame)
 
   # family things
   if (family != "poisson" || family$family != "poisson") {
@@ -28,9 +28,11 @@ rrp_glm <- function(fixed,
   }
 
   # Spatial effect
+  coords <- as.matrix(lm(spatial, data = data, method = "model.frame"))
 
-  spatial_frame <- lm(spatial, data = data, method = "model.frame")
+  # TODO: change this to param_start, then figure out how to get rid of it
 
+  starting <- param_start
   ptm <- proc.time() # starting time
   p = ncol(X) # expected rank of X
   n <- length(O) # number of observations
@@ -42,10 +44,9 @@ rrp_glm <- function(fixed,
   #######################################
   # Prepare MCMC iteration values
   #######################################
-  batchlength = adapt[["batchlength"]]
-  n.batch = adapt[["n.batch"]]
-  niter <- batchlength*n.batch
-  cat("MCMC chain size:", batchlength,"\n")
+
+  niter <- iter*chains
+  cat("MCMC chain size:", iter,"\n")
 
   #######################################
   # Define prior parameters
@@ -55,7 +56,6 @@ rrp_glm <- function(fixed,
   s2.b   <- priors[["s2.IG"]][2]
   phi.a  <- priors[["phi.Unif"]][1]
   phi.b  <- priors[["phi.Unif"]][2]
-
 
 
   # might be doing gibbs sampler.
@@ -84,7 +84,7 @@ rrp_glm <- function(fixed,
   }
 
   phi.lf <- function(phi){
-    K1 = rp(phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(core)) # C++ function for approximating eigenvectors
+    K1 = rp(phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(cores)) # C++ function for approximating eigenvectors
     K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
     d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
 
@@ -94,7 +94,7 @@ rrp_glm <- function(fixed,
     signdiag = as.logical(1 - signdiag)
     u[,signdiag] = -u[,signdiag]
 
-    U <- mmC(PPERP,u,as.integer(n),as.integer(rank),as.integer(core)) # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
+    U <- mmC(PPERP,u,as.integer(n),as.integer(rank),as.integer(cores)) # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
     z <- xbeta + U %*% (sqrt(d)*etaParams) # U is from random projection
     foo2 <- crossprod(etaParams,etaParams)
     lr <- (
@@ -116,7 +116,6 @@ rrp_glm <- function(fixed,
   phiindx <- s2indx + 1
 
 
-
   #########################################
   # Orig: initialize some matrix for storage
   # Prepares matrices to hold estimates of parameters
@@ -127,12 +126,21 @@ rrp_glm <- function(fixed,
   samples_arrp <- matrix(NA,ncol = p,nrow = niter)
   sTunings <- sParams <- matrix(NA,nrow = nParams) # update the current parameters for each iteration
 
+
   #########################################
   # Orig: feed in the initial values and tuning params
   # Set starting parameters
   #########################################
-  sParams[betaindx] <- starting[["beta"]];  sParams[s2indx] <- starting[["s2"]];  sParams[phiindx] <- starting[["phi"]]
+  sParams[betaindx] <- starting[["beta"]]
+
+  sParams[s2indx] <- starting[["s2"]]
+
+  sParams[phiindx] <- starting[["phi"]]
+
+
   sTunings[betaindx] <- tuning[["beta"]];  sTunings[s2indx] <- tuning[["s2"]];  sTunings[phiindx] <- tuning[["phi"]]
+
+
   wTunings <- rep(tuning[["w"]],rank)
   wTunings <- log(wTunings)
   sTunings <- log(sTunings)
@@ -140,8 +148,8 @@ rrp_glm <- function(fixed,
 
   # Stores info on acceptance rates for MCMC
   # for acceptance rate
-  accept_s <- matrix(NA, ncol = nParams, nrow = n.batch)
-  accept_w <- matrix(NA, ncol = rank, nrow = n.batch)
+  accept_s <- matrix(NA, ncol = nParams, nrow = chains)
+  accept_w <- matrix(NA, ncol = rank, nrow = chains)
 
 
   est.time  <- proc.time()
@@ -149,10 +157,10 @@ rrp_glm <- function(fixed,
   K = rp(
             sParams[phiindx], # single number, phi in starting param list
             coords, #literally x,y coords of obs
-            as.integer(n), # number if interations (batchlength)
+            as.integer(n), # number if interations (iter)
             as.integer(rk), # rank times mul (what is mul?)
             nu, #nu as before
-            as.integer(core)# number of cores
+            as.integer(cores)# number of cores
             ) # C++ function for approximating eigenvectors
   est.time  <- proc.time() - est.time # calculates how long one random projection takes
   cat("Estimated time (hrs):",niter*2*est.time[3]/3600 ,"\n") # prints out estimate time in hours
@@ -160,7 +168,7 @@ rrp_glm <- function(fixed,
   K.rp = list(d = K[[1]],u = K[[2]][,1:rank]) # d is sing values, u is left sing vecs, only take first 1:rank
   d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
   U1 <- U <- u <- K.rp$u[,1:rank] # approximated eigenvectors
-  U <- mmC(PPERP,U,as.integer(n),as.integer(rank),as.integer(core)) # compute PPERP%*%u restrict random effect to be orthogonal to fix effect
+  U <- mmC(PPERP,U,as.integer(n),as.integer(rank),as.integer(cores)) # compute PPERP%*%u restrict random effect to be orthogonal to fix effect
 
   if (is.null(starting[["w"]])) {
     etaParams <- rep(0,rank)
@@ -173,12 +181,12 @@ rrp_glm <- function(fixed,
   xbeta <- X %*% sParams[betaindx]
 
   ##### start MCMC loop #####
-  for (k in 1:n.batch) {
+  for (k in 1:chains) {
     sAccepts <- matrix(0,nrow = nParams)
     wAccepts <- matrix(0,nrow = rank)
 
 
-    for (i in 1:batchlength) {
+    for (i in 1:iter) {
 
       # block update beta
       betastar <- rnorm(p, sParams[betaindx], sd = exp(sTunings[betaindx])) # draw for proposed beta params
@@ -273,23 +281,23 @@ rrp_glm <- function(fixed,
         wParams <- delta.lfcur$w
       }
 
-      samples_arrp[(k - 1)*batchlength + i,] <- AParams
-      samples_s[(k - 1)*batchlength + i,] <- sParams
-      samples_w[(k - 1)*batchlength + i,] <- wParams
-      samples_eta[(k - 1)*batchlength + i,] <- etaParams
+      samples_arrp[(k - 1)*iter + i,] <- AParams
+      samples_s[(k - 1)*iter + i,] <- sParams
+      samples_w[(k - 1)*iter + i,] <- wParams
+      samples_eta[(k - 1)*iter + i,] <- etaParams
     }
 
     cat(" Batch ",k,"\n")
     cat("-------------------------------------------------------\n")
     cat("----------------est------------------------------------\n")
-    cat(bmmat(samples_s[((k - 1)*batchlength + 1):(k*batchlength),])[,1],"\n")
+    cat(bmmat(samples_s[((k - 1)*iter + 1):(k*iter),])[,1],"\n")
     cat("-------------------------------------------------------\n")
 
-    cat("acceptance rate:", round(sAccepts/(batchlength),4),"\n")
+    cat("acceptance rate:", round(sAccepts/(iter),4),"\n")
     cat("-------------------------------------------------------\n")
 
-    accept_s[k,] <- sAccepts/(batchlength)
-    accept_w[k,] <- wAccepts/(batchlength)
+    accept_s[k,] <- sAccepts/(iter)
+    accept_w[k,] <- wAccepts/(iter)
 
   }
   accept_s <- apply(accept_s,2,mean)
@@ -419,7 +427,7 @@ delta_log_full_conditional <- function(delta){ # delta is rank-m
 }
 
 phi_log_full_conditional <- function(phi){
-  K1 = rp(phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(core)) # C++ function for approximating eigenvectors
+  K1 = rp(phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(cores)) # C++ function for approximating eigenvectors
   K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
   d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
 
@@ -429,7 +437,7 @@ phi_log_full_conditional <- function(phi){
   signdiag = as.logical(1 - signdiag)
   u[,signdiag] = -u[,signdiag]
 
-  U <- mmC(PPERP,u,as.integer(n),as.integer(rank),as.integer(core)) # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
+  U <- mmC(PPERP,u,as.integer(n),as.integer(rank),as.integer(cores)) # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
   z <- xbeta + U %*% (sqrt(d)*etaParams) # U is from random projection
   foo2 <- crossprod(etaParams,etaParams)
   lr <- (
