@@ -100,3 +100,33 @@ rsr_fit <- poi_gp_arrpfit(O = y,
                           rank = rank)
 
 
+
+
+model_frame <- lm(~ x1 + x2, data = sim_data, method = "model.frame")
+
+model_matrix <- model.matrix(model_frame)
+
+
+rrp_glm(
+          fixed = y_pois ~ x1 + x2 + x3,
+          spatial = ~ x1 + x2,
+          data = sim_data,
+          family = poisson(),
+          covfn = covfndef(nu),
+          iter = 2000,
+          chains = 2,
+          cores = 1,
+          param_start = list("beta" = rnorm(3, 5, sd = 0.5),
+                             "s2" = 2,
+                             "phi" = 0.5),
+          priors = list("beta.normal" = 100, # variance of beta prior
+                        "s2.IG" = c(2,2), # inverse gamma params
+                        "phi.unif" = c(0.01, 1)), # uniform prior on phi
+          tuning = list("beta" = rnorm(3, 1, 0.2),
+                        "s2" = 0.1,
+                        "phi" = 0.01,
+                        "w" = 0.1),
+          nu = nu,
+          rank = 10,
+          mul = 2)
+

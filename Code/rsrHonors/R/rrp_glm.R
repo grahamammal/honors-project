@@ -13,6 +13,24 @@ rrp_glm <- function(fixed,
                     rank,
                     mul = 2){ # rank to reduce spatial matrix to
 
+
+  call <- match.call()
+
+
+  # Figure out how to interpret the formula fixed fixed
+  model_frame <- lm(fixed, data = data, method = "model.frame")
+  X <- model.matrix(fixed, data = model_frame)
+  y <- model.response(model_frame)
+
+  # family things
+  if (family != "poisson" || family$family != "poisson") {
+    stop("I haven't implmented this family lol")
+  }
+
+  # Spatial effect
+
+  spatial_frame <- lm(spatial, data = data, method = "model.frame")
+
   ptm <- proc.time() # starting time
   p = ncol(X) # expected rank of X
   n <- length(O) # number of observations
