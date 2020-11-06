@@ -1,5 +1,9 @@
 context("rrp_glm")
 
+library(withr)
+
+op <- options(warn = 2)
+defer(options(op))
 # simulate data
 set.seed(451)
 n <- 100
@@ -32,28 +36,29 @@ sim_data <- data.frame(x1 = x1, x2 = x2, x3 = x3, W = W,
 
 test_that("test poisson model runs", {
   # run poisson model
+
   poisson_model <- rrp_glm(
-          fixed = y_pois ~ x1 + x2 + x3,
-          spatial = y_pois ~ x1 + x2,
-          data = sim_data,
-          family = poisson(),
-          covfn = covfndef(nu),
-          iter = 1000,
-          chains = 2,
-          cores = 1,
-          param_start = list("beta" = rnorm(4, 5, sd = 0.5),
-                             "s2" = 2,
-                             "phi" = 0.5),
-          priors = list("beta.normal" = 100, # variance of beta prior
-                        "s2.IG" = c(2,2), # inverse gamma params
-                        "phi.Unif" = c(0.01, 1.5)), # uniform prior on phi
-          tuning = list("beta" = runif(4, 0.005, 0.01),
-                        "s2" = 0.1,
-                        "phi" = 0.01,
-                        "w" = 0.1),
-          nu = nu,
-          rank = 10,
-          mul = 2)
+        fixed = y_pois ~ x1 + x2 + x3,
+        spatial = y_pois ~ x1 + x2,
+        data = sim_data,
+        family = poisson(),
+        covfn = covfndef(nu),
+        iter = 1000,
+        chains = 2,
+        cores = 1,
+        param_start = list("beta" = rnorm(4, 5, sd = 0.5),
+                           "s2" = 2,
+                           "phi" = 0.5),
+        priors = list("beta.normal" = 100, # variance of beta prior
+                      "s2.IG" = c(2,2), # inverse gamma params
+                      "phi.Unif" = c(0.01, 1.5)), # uniform prior on phi
+        tuning = list("beta" = runif(4, 0.005, 0.01),
+                      "s2" = 0.1,
+                      "phi" = 0.01,
+                      "w" = 0.1),
+        nu = nu,
+        rank = 10,
+        mul = 2)
 
   expect_type(poisson_model, "list")
 })
@@ -63,7 +68,7 @@ test_that("test linear model runs", {
         fixed = y_norm ~ x1 + x2 + x3,
         spatial = y_norm ~ x1 + x2,
         data = sim_data,
-        family = poisson(),
+        family = gaussian(),
         covfn = covfndef(nu),
         iter = 1000,
         chains = 2,
@@ -86,11 +91,11 @@ test_that("test linear model runs", {
 })
 
 test_that("test logistic model runs", {
-  logistic_model <- rrp_glm(
+  expect_type(rrp_glm(
         fixed = y_binom ~ x1 + x2 + x3,
         spatial = y_binom ~ x1 + x2,
         data = sim_data,
-        family = poisson(),
+        family = binomial(),
         covfn = covfndef(nu),
         iter = 1000,
         chains = 2,
@@ -107,9 +112,7 @@ test_that("test logistic model runs", {
                       "w" = 0.1),
         nu = nu,
         rank = 10,
-        mul = 2)
-
-  expect_type(logistic_model, "list")
+        mul = 2), "list")
 })
 
 test_that("poisson fit matches spatialPoisson fit", {
@@ -158,7 +161,7 @@ test_that("poisson fit matches spatialPoisson fit", {
         adapt = c("batchlength" = 1000,
                    "n.batch" = 2),
         nu = nu,
-        core = core,
+        core = 1,
         starting = starting,
         tuning = tuning,
         priors = priors,
@@ -168,13 +171,14 @@ test_that("poisson fit matches spatialPoisson fit", {
 })
 
 test_that("beta full conditional correct", {
-
+  expect_true(FALSE)
 })
 
 
 test_that("delta full conditional correct", {
+  expect_true(FALSE)
 })
 
 test_that("phi full conditional correct", {
-
+  expect_true(FALSE)
 })

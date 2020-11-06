@@ -22,8 +22,15 @@ rrp_glm <- function(fixed,
   X <- model.matrix(fixed, data = model_frame)
   O <- model.response(model_frame)
 
+  if (family == "poisson" || family$family == "poisson") {
+    density_function <- dpois
+  } else if (family == "binomial" || family$family == "binomial") {
+    density_function <- function(x, prob, log) {
+      dbinom(x, size = 1, prob = prob, log = log)
+    }
+  }
   # family things
-  if (family != "poisson" || family$family != "poisson") {
+  if (family == "gaussian" || family$family == "gaussian") {
     stop("I haven't implmented this family lol")
   }
 
@@ -69,7 +76,7 @@ rrp_glm <- function(fixed,
   # lf: look at notes
   beta.lf <- function(beta){
     z <- X %*% beta + wParams # if rsr, wParams = L%*%eta
-    lf <- sum(dpois(O, exp(z), log = TRUE)) - crossprod(beta)/(p*beta.b)
+    lf <- sum(density_function(O, exp(z), log = TRUE)) - crossprod(beta)/(p*beta.b)
     return(lf)
   }
   # log full conditional of delta
@@ -78,7 +85,7 @@ rrp_glm <- function(fixed,
     w = U %*% (sqrt(d)*delta)
     z <- xbeta + w
     foo2 <- crossprod(delta,delta) # d = D^2 from random projection
-    lf <- sum(dpois(O, exp(z), log = TRUE)) - 1/(2*sParams[s2indx]) * foo2
+    lf <- sum(density_function(O, exp(z), log = TRUE)) - 1/(2*sParams[s2indx]) * foo2
     return(list(lr = lf, twKinvw = foo2, w = w))
   }
 
@@ -97,7 +104,7 @@ rrp_glm <- function(fixed,
     z <- xbeta + U %*% (sqrt(d)*etaParams) # U is from random projection
     foo2 <- crossprod(etaParams,etaParams)
     lr <- (
-      sum(dpois(O,exp(z),log = TRUE)) - 0.5*1/sParams[s2indx] * foo2 # likelihood
+      sum(density_function(O,exp(z),log = TRUE)) - 0.5*1/sParams[s2indx] * foo2 # likelihood
       # + log(phi - phi.a) + log(phi.b - phi) # jacobian
     )
     return(list(lr = lr,d = d,twKinvw = foo2, U = U, u = u))
@@ -404,7 +411,6 @@ bmmat <- function(x)
     stop("'x' must be a matrix or data frame.")
   num = ncol(x)
   bmvals = matrix(NA, num, 2)
-  colnames(bmvals) = c("est", "se")
   rownames(bmvals) = colnames(x)
   bmres = apply(x, 2, bm)
   for (i in 1:num) bmvals[i, ] = c(bmres[[i]]$est, bmres[[i]]$se)
@@ -413,7 +419,7 @@ bmmat <- function(x)
 
 beta_log_full_conditional <- function(beta){
     z <- X %*% beta + wParams # if rsr, wParams = L%*%eta
-    lf <- sum(dpois(O, exp(z), log = TRUE)) - crossprod(beta)/(p*beta.b)
+    lf <- sum(density_function(O, exp(z), log = TRUE)) - crossprod(beta)/(p*beta.b)
     return(lf)
 }
 
@@ -421,7 +427,7 @@ delta_log_full_conditional <- function(delta){ # delta is rank-m
     w = U %*% (sqrt(d)*delta)
     z <- xbeta + w
     foo2 <- crossprod(delta,delta) # d = D^2 from random projection
-    lf <- sum(dpois(O, exp(z), log = TRUE)) - 1/(2*sParams[s2indx]) * foo2
+    lf <- sum(density_function(O, exp(z), log = TRUE)) - 1/(2*sParams[s2indx]) * foo2
     return(list(lr = lf, twKinvw = foo2, w = w))
 }
 
@@ -440,7 +446,7 @@ phi_log_full_conditional <- function(phi){
   z <- xbeta + U %*% (sqrt(d)*etaParams) # U is from random projection
   foo2 <- crossprod(etaParams,etaParams)
   lr <- (
-    sum(dpois(O,exp(z),log = TRUE)) - 0.5*1/sParams[s2indx] * foo2 # likelihood
+    sum(density_function(O,exp(z),log = TRUE)) - 0.5*1/sParams[s2indx] * foo2 # likelihood
     # + log(phi - phi.a) + log(phi.b - phi) # jacobian
   )
   return(list(lr = lr,d = d,twKinvw = foo2, U = U, u = u))
