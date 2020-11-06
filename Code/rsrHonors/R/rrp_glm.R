@@ -57,7 +57,6 @@ rrp_glm <- function(fixed,
   phi.a  <- priors[["phi.Unif"]][1]
   phi.b  <- priors[["phi.Unif"]][2]
 
-
   # might be doing gibbs sampler.
   # Full conditional sounds like gibbs sampler
   # Might be doing component wise metropolis hastings.

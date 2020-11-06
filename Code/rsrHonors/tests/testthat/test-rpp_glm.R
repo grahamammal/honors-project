@@ -38,16 +38,16 @@ test_that("test poisson model runs", {
           data = sim_data,
           family = poisson(),
           covfn = covfndef(nu),
-          iter = 2000,
+          iter = 1000,
           chains = 2,
           cores = 1,
-          param_start = list("beta" = rnorm(3, 5, sd = 0.5),
+          param_start = list("beta" = rnorm(4, 5, sd = 0.5),
                              "s2" = 2,
                              "phi" = 0.5),
           priors = list("beta.normal" = 100, # variance of beta prior
                         "s2.IG" = c(2,2), # inverse gamma params
-                        "phi.unif" = c(0.01, 1)), # uniform prior on phi
-          tuning = list("beta" = rnorm(3, 1, 0.2),
+                        "phi.Unif" = c(0.01, 1.5)), # uniform prior on phi
+          tuning = list("beta" = runif(4, 0.005, 0.01),
                         "s2" = 0.1,
                         "phi" = 0.01,
                         "w" = 0.1),
@@ -65,16 +65,16 @@ test_that("test linear model runs", {
         data = sim_data,
         family = poisson(),
         covfn = covfndef(nu),
-        iter = 2000,
+        iter = 1000,
         chains = 2,
         cores = 1,
-        param_start = list("beta" = rnorm(3, 5, sd = 0.5),
+        param_start = list("beta" = rnorm(4, 5, sd = 0.5),
                            "s2" = 2,
                            "phi" = 0.5),
         priors = list("beta.normal" = 100, # variance of beta prior
                       "s2.IG" = c(2,2), # inverse gamma params
-                      "phi.unif" = c(0.01, 1)), # uniform prior on phi
-        tuning = list("beta" = rnorm(3, 1, 0.2),
+                      "phi.Unif" = c(0.01, 1)), # uniform prior on phi
+        tuning = list("beta" = rnorm(4, 1, 0.2),
                       "s2" = 0.1,
                       "phi" = 0.01,
                       "w" = 0.1),
@@ -92,16 +92,16 @@ test_that("test logistic model runs", {
         data = sim_data,
         family = poisson(),
         covfn = covfndef(nu),
-        iter = 2000,
+        iter = 1000,
         chains = 2,
         cores = 1,
-        param_start = list("beta" = rnorm(3, 5, sd = 0.5),
+        param_start = list("beta" = rnorm(4, 5, sd = 0.5),
                            "s2" = 2,
                            "phi" = 0.5),
-        priors = list("beta.normal" = 100, # variance of beta prior
+        priors = list("beta.normal" = c(100), # variance of beta prior
                       "s2.IG" = c(2,2), # inverse gamma params
-                      "phi.unif" = c(0.01, 1)), # uniform prior on phi
-        tuning = list("beta" = rnorm(3, 1, 0.2),
+                      "phi.Unif" = c(0.01, 1.5)), # uniform prior on phi
+        tuning = list("beta" = runif(4, 0.05, 0.015),
                       "s2" = 0.1,
                       "phi" = 0.01,
                       "w" = 0.1),
@@ -113,15 +113,15 @@ test_that("test logistic model runs", {
 })
 
 test_that("poisson fit matches spatialPoisson fit", {
-  starting <- list("beta" = rnorm(3, 5, sd = 0.5),
+  starting <- list("beta" = rnorm(4, 5, sd = 0.5),
                    "s2" = 2,
                    "phi" = 0.5)
 
   priors <- list("beta.normal" = 100, # variance of beta prior
                  "s2.IG" = c(2,2), # inverse gamma params
-                 "phi.unif" = c(0.01, 1))
+                 "phi.Unif" = c(0.01, 1))
 
-  tuning <- list("beta" = rnorm(3, 1, 0.2),
+  tuning <- list("beta" = rnorm(4, 1, 0.2),
                  "s2" = 0.1,
                  "phi" = 0.01,
                  "w" = 0.1)
@@ -162,7 +162,6 @@ test_that("poisson fit matches spatialPoisson fit", {
         starting = starting,
         tuning = tuning,
         priors = priors,
-        nu = nu,
         rank = 10)
 
   expect_equal(my_fit$p.params, orig_fit$p.params)
