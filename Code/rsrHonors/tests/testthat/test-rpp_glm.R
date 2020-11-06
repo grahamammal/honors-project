@@ -39,7 +39,7 @@ test_that("test poisson model runs", {
 
   poisson_model <- rrp_glm(
         fixed = y_pois ~ x1 + x2 + x3,
-        spatial = y_pois ~ x1 + x2,
+        spatial =  ~ x1 + x2,
         data = sim_data,
         family = poisson(),
         covfn = covfndef(nu),
@@ -66,7 +66,7 @@ test_that("test poisson model runs", {
 test_that("test linear model runs", {
   linear_model <- rrp_glm(
         fixed = y_norm ~ x1 + x2 + x3,
-        spatial = y_norm ~ x1 + x2,
+        spatial = ~ x1 + x2,
         data = sim_data,
         family = gaussian(),
         covfn = covfndef(nu),
@@ -93,7 +93,7 @@ test_that("test linear model runs", {
 test_that("test logistic model runs", {
   expect_type(rrp_glm(
         fixed = y_binom ~ x1 + x2 + x3,
-        spatial = y_binom ~ x1 + x2,
+        spatial = ~ x1 + x2,
         data = sim_data,
         family = binomial(),
         covfn = covfndef(nu),
@@ -134,7 +134,7 @@ test_that("poisson fit matches spatialPoisson fit", {
   set.seed(451)
   my_fit <- rrp_glm(
       fixed = y_pois ~ x1 + x2 + x3,
-      spatial = y_pois ~ x1 + x2,
+      spatial =  ~ x1 + x2,
       data = sim_data,
       family = poisson(),
       covfn = covfndef(nu),
