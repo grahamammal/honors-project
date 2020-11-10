@@ -1,5 +1,3 @@
-context("rrp_glm")
-
 library(withr)
 
 op <- options(warn = 2)
@@ -12,17 +10,22 @@ sigma2 <- 1
 phi <- 0.2
 tau2 <- 0.1
 
-
+x0 <- rep(1, n)
 x1 <- runif(n)
 x2 <- runif(n)
 x3 <- rnorm(n)
+
+X <- cbind(x0, x1, x2, x3)
+
+beta <- c(0,1,1,-2)
+
 
 h <- as.matrix(dist(data.frame(x1 = x1, x2 = x2)))
 matern_covariance <- sigma2 * (1 + sqrt(5)*h/phi + 5*h^2 / (3*phi^2)) * exp(-1*sqrt(5)*h/phi)
 
 W <- rmvn(n = 1, mu = rep(0, n), V = matern_covariance)
 
-y_mean <- 5*x1 + 5*x2 + 5*x3 + W
+y_mean <- as.numeric(X %*% beta + W)
 
 y_pois <- rpois(n, exp(y_mean))
 y_norm <- rnorm(n, y_mean, sqrt(tau2))
@@ -171,7 +174,18 @@ test_that("poisson fit matches spatialPoisson fit", {
 })
 
 test_that("beta full conditional correct", {
-  expect_true(FALSE)
+
+  dens_fun_log <- function(x, mean) {dpois(x, lambda = poisson()$linkinv(mean), log = TRUE)}
+
+  estimate_lfc <- beta_log_full_conditional(beta = beta,
+                            X = X,
+                            wParams = W,
+                            O = y_pois,
+                            p = 4,
+                            beta.b = 100,
+                            dens_fun_log = dens_fun_log)
+
+  expect_snapshot_value(estimate_lfc)
 })
 
 

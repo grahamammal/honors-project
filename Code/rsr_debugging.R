@@ -14,7 +14,7 @@ source("../RSRcode/spatialPoisson.R")
 
 
 
-n <- 400
+n <- 500
 
 
 set.seed(454)
@@ -32,7 +32,6 @@ h <- as.matrix(dist(data.frame(x1 = x1, x2 = x2)))
 
 matern_covariance <- sigma2 * (1 + sqrt(5)*h/phi + 5*h^2 / (3*phi^2)) * exp(-1*sqrt(5)*h/phi)
 
-matern_covariance2 <- fields::Matern(h, range = phi/sqrt(2*nu), phi = sigma2, smoothness = nu)
 
 W <- mvrnorm(n = 1, mu = rep(0, n), Sigma = matern_covariance)
 

@@ -14,25 +14,27 @@ rrp_glm <- function(fixed,
                     mul = 2){ # rank to reduce spatial matrix to
 
 
-  call <- match.call()
-
-
   # Figure out how to interpret the formula fixed fixed
   model_frame <- lm(fixed, data = data, method = "model.frame")
   X <- model.matrix(fixed, data = model_frame)
   O <- model.response(model_frame)
 
-  if (family == "poisson" || family$family == "poisson") {
-    density_function <- dpois
-  } else if (family == "binomial" || family$family == "binomial") {
-    density_function <- function(x, prob, log) {
-      dbinom(x, size = 1, prob = prob, log = log)
-    }
+  if (is.character(family))
+    family <- get(family, mode = "function", envir = parent.frame())
+  if (is.function(family)) family <- family()
+  if (is.null(family$family)) {
+	  print(family)
+	  stop("'family' not recognized")
   }
-  # family things
-  if (family == "gaussian" || family$family == "gaussian") {
-    stop("I haven't implmented this family lol")
+
+  if (family$family == "gaussian") {
+    stop("I haven't implemented gaussian families yet")
+  } else if (family$family == "poisson") {
+    dens_fun_log <- function(x, mean) {dpois(x, lambda = family$linkinv(mean), log = TRUE)}
+  } else if (family$family == "binomial") {
+    dens_fun_log <- function(x, mean) {dbinom(x, size = 1, prob = family$linkinv(mean), log = TRUE)}
   }
+
 
   # Spatial effect
   coords <- as.matrix(lm(spatial, data = data, method = "model.frame"))
@@ -76,7 +78,7 @@ rrp_glm <- function(fixed,
   # lf: look at notes
   beta.lf <- function(beta){
     z <- X %*% beta + wParams # if rsr, wParams = L%*%eta
-    lf <- sum(density_function(O, exp(z), log = TRUE)) - crossprod(beta)/(p*beta.b)
+    lf <- sum(dens_fun_log(O, mean = z)) - crossprod(beta)/(p*beta.b)
     return(lf)
   }
   # log full conditional of delta
@@ -85,7 +87,7 @@ rrp_glm <- function(fixed,
     w = U %*% (sqrt(d)*delta)
     z <- xbeta + w
     foo2 <- crossprod(delta,delta) # d = D^2 from random projection
-    lf <- sum(density_function(O, exp(z), log = TRUE)) - 1/(2*sParams[s2indx]) * foo2
+    lf <- sum(dens_fun_log(O, mean = z)) - 1/(2*sParams[s2indx]) * foo2
     return(list(lr = lf, twKinvw = foo2, w = w))
   }
 
@@ -104,7 +106,7 @@ rrp_glm <- function(fixed,
     z <- xbeta + U %*% (sqrt(d)*etaParams) # U is from random projection
     foo2 <- crossprod(etaParams,etaParams)
     lr <- (
-      sum(density_function(O,exp(z),log = TRUE)) - 0.5*1/sParams[s2indx] * foo2 # likelihood
+      sum(dens_fun_log(O, mean = z)) - 0.5*1/sParams[s2indx] * foo2 # likelihood
       # + log(phi - phi.a) + log(phi.b - phi) # jacobian
     )
     return(list(lr = lr,d = d,twKinvw = foo2, U = U, u = u))
@@ -417,21 +419,27 @@ bmmat <- function(x)
   bmvals
 }
 
-beta_log_full_conditional <- function(beta){
+beta_log_full_conditional <- function(beta, X, wParams, O, p, beta.b, dens_fun_log){
     z <- X %*% beta + wParams # if rsr, wParams = L%*%eta
-    lf <- sum(density_function(O, exp(z), log = TRUE)) - crossprod(beta)/(p*beta.b)
+    lf <- sum(dens_fun_log(O, mean = z)) - crossprod(beta)/(p*beta.b)
     return(lf)
 }
 
-delta_log_full_conditional <- function(delta){ # delta is rank-m
+delta_log_full_conditional <- function(delta, O, U, d, xbeta, sParams, dens_fun_log){ # delta is rank-m
     w = U %*% (sqrt(d)*delta)
     z <- xbeta + w
     foo2 <- crossprod(delta,delta) # d = D^2 from random projection
-    lf <- sum(density_function(O, exp(z), log = TRUE)) - 1/(2*sParams[s2indx]) * foo2
+    lf <- sum(dens_fun_log(O, mean = z)) - 1/(2*sParams[s2indx]) * foo2
     return(list(lr = lf, twKinvw = foo2, w = w))
 }
 
-phi_log_full_conditional <- function(phi){
+phi_log_full_conditional <- function(phi,
+                                     coords, O,
+                                     n, rk, nu, cores,
+                                     dens_fun_log,
+                                     U1, PPERP, rank,
+                                     xbeta, etaParams,
+                                     sParams, s2indx){
   K1 = rp(phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(cores)) # C++ function for approximating eigenvectors
   K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
   d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
@@ -446,7 +454,7 @@ phi_log_full_conditional <- function(phi){
   z <- xbeta + U %*% (sqrt(d)*etaParams) # U is from random projection
   foo2 <- crossprod(etaParams,etaParams)
   lr <- (
-    sum(density_function(O,exp(z),log = TRUE)) - 0.5*1/sParams[s2indx] * foo2 # likelihood
+    sum(dens_fun_log(O, mean = z)) - 0.5*1/sParams[s2indx] * foo2 # likelihood
     # + log(phi - phi.a) + log(phi.b - phi) # jacobian
   )
   return(list(lr = lr,d = d,twKinvw = foo2, U = U, u = u))

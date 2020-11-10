@@ -1,4 +1,3 @@
-context("Random Projections")
 
 
 test_that("rp returns list", {
