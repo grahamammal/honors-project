@@ -1,7 +1,6 @@
 library(withr)
 
-op <- options(warn = 2)
-defer(options(op))
+
 # simulate data
 set.seed(451)
 n <- 100
@@ -177,22 +176,60 @@ test_that("beta full conditional correct", {
 
   dens_fun_log <- function(x, mean) {dpois(x, lambda = poisson()$linkinv(mean), log = TRUE)}
 
-  estimate_lfc <- beta_log_full_conditional(beta = beta,
+  expect_snapshot_value(beta_log_full_conditional(beta = beta,
                             X = X,
                             wParams = W,
                             O = y_pois,
                             p = 4,
                             beta.b = 100,
-                            dens_fun_log = dens_fun_log)
+                            dens_fun_log = dens_fun_log), style = "serialize")
 
-  expect_snapshot_value(estimate_lfc)
 })
 
 
 test_that("delta full conditional correct", {
-  expect_true(FALSE)
+dens_fun_log <- function(x, mean) {dpois(x, lambda = poisson()$linkinv(mean), log = TRUE)}
+
+  cov_eigen <- eigen(matern_covariance)
+
+  U <- cov_eigen$vectors[,1:10]
+  d <- cov_eigen$values[1:10] ^ 2
+
+  expect_snapshot_value(delta_log_full_conditional(delta = -4:5/10,
+                            O = y_pois,
+                            U = U,
+                            d = d,
+                            xbeta = X %*% beta,
+                            sParams = 1,
+                            s2indx = 1,
+                            dens_fun_log = dens_fun_log), style = "serialize")
 })
 
+
 test_that("phi full conditional correct", {
-  expect_true(FALSE)
-})
+  dens_fun_log <- function(x, mean) {dpois(x, lambda = poisson()$linkinv(mean), log = TRUE)}
+
+  cov_eigen <- eigen(matern_covariance)
+
+  U <- cov_eigen$vectors[,1:10]
+  d <- cov_eigen$values[1:10] ^ 2
+
+  AP = chol2inv(chol(crossprod(X,X))) %*% t(X) # projection onto column space of X
+  PPERP <- diag(n) - X %*% AP # projection onto space orthogonal to column space of X
+
+
+  expect_snapshot_value(phi_log_full_conditional(phi = 0.2,
+                            coords = cbind(x1, x2),
+                            O = y_pois,
+                            n = n,
+                            rk = 10,
+                            nu = nu,
+                            cores = 1,
+                            dens_fun_log = dens_fun_log,
+                            U1 = U,
+                            PPERP = PPERP,
+                            rank = 10,
+                            xbeta = X %*% beta,
+                            etaParams = -4:5/10,
+                            sParams = 1,
+                            s2indx = 1), style = "serialize")})

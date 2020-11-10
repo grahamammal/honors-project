@@ -425,7 +425,7 @@ beta_log_full_conditional <- function(beta, X, wParams, O, p, beta.b, dens_fun_l
     return(lf)
 }
 
-delta_log_full_conditional <- function(delta, O, U, d, xbeta, sParams, dens_fun_log){ # delta is rank-m
+delta_log_full_conditional <- function(delta, O, U, d, xbeta, sParams, s2indx, dens_fun_log){ # delta is rank-m
     w = U %*% (sqrt(d)*delta)
     z <- xbeta + w
     foo2 <- crossprod(delta,delta) # d = D^2 from random projection
