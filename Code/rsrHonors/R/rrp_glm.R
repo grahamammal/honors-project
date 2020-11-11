@@ -74,10 +74,11 @@ rrp_glm <- function(fixed,
   # This vector is called sParams
   ####################################
   nParams <- p + 2;
-  betaindx <- 1:p;
-  s2indx <- p + 1;
-  phiindx <- s2indx + 1
-
+  beta_index <- 1:p;
+  sigma2_index <- p + 1;
+  phi_index <- sigma2_index + 1
+  delta_index <- (nParams + 1):(nParams + rank)
+  w_index <- (nParams + rank + 1):(nParams + rank + n)
 
   #########################################
   # Orig: initialize some matrix for storage
@@ -89,33 +90,44 @@ rrp_glm <- function(fixed,
   samples_arrp <- matrix(NA,ncol = p,nrow = niter)
   sTunings <- sParams <- matrix(NA,nrow = nParams) # update the current parameters for each iteration
 
-  param_draws <- array(dim = c(iter, chains, nParams + rank + n),
-                       dimnames = list("Iteration" = 1:iter,
-                                       "Chain" = 1:chains,
-                                       "Parameter" = c(paste0("beta_", 0:(p - 1)),
-                                                       "sigma2",
-                                                       "phi",
-                                                       paste0("delta_", 1:rank),
-                                                       paste0("w_", 1:n))))
 
+  samples <- array(dim = c(iter, chains, nParams + rank + n),
+                   dimnames = list("Iteration" = 1:iter,
+                                   "Chain" = 1:chains,
+                                   "Parameter" = c(paste0("beta_", 0:(p - 1)),
+                                                   "sigma2",
+                                                   "phi",
+                                                   paste0("delta_", 1:rank),
+                                                   paste0("w_", 1:n))))
+
+
+  # current_beta
+  # current_sigma2
+  # current_phi
+  # current_delta
+  # current_w
 
   #########################################
   # Orig: feed in the initial values and tuning params
   # Set starting parameters
   #########################################
-  sParams[betaindx] <- starting[["beta"]]
 
-  sParams[s2indx] <- starting[["s2"]]
+  sParams[beta_index] <- starting[["beta"]]
 
-  sParams[phiindx] <- starting[["phi"]]
+  sParams[sigma2_index] <- starting[["s2"]]
+
+  sParams[phi_index] <- starting[["phi"]]
 
 
-  sTunings[betaindx] <- tuning[["beta"]];  sTunings[s2indx] <- tuning[["s2"]];  sTunings[phiindx] <- tuning[["phi"]]
+  sTunings[beta_index] <- tuning[["beta"]]
+  sTunings[sigma2_index] <- tuning[["s2"]]
+  sTunings[phi_index] <- tuning[["phi"]]
 
 
   wTunings <- rep(tuning[["w"]],rank)
   wTunings <- log(wTunings)
   sTunings <- log(sTunings)
+
 
 
   # Stores info on acceptance rates for MCMC
@@ -127,7 +139,7 @@ rrp_glm <- function(fixed,
   est_start  <- Sys.time()
   # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm.
   K = rp(
-            sParams[phiindx], # single number, phi in starting param list
+            sParams[phi_index], # single number, phi in starting param list
             coords, #literally x,y coords of obs
             as.integer(n), # number if interations (iter)
             as.integer(rk), # rank times mul (what is mul?)
@@ -150,20 +162,27 @@ rrp_glm <- function(fixed,
     etaParams <- 1/sqrt(d)*(t(U) %*% wParams)
   }
 
-  xbeta <- X %*% sParams[betaindx]
+  xbeta <- X %*% sParams[beta_index]
 
   ##### start MCMC loop #####
   for (k in 1:chains) {
     sAccepts <- matrix(0,nrow = nParams)
     wAccepts <- matrix(0,nrow = rank)
 
+    # Generate Chain Starting positions following stan recomendation
+
+    sParams[beta_index] <- runif(p, min = -2, max = 2)
+    sParams[sigma2_index] <- exp(runif(1, min = -2, max = 2))
+    sParams[phi_index] <- phi.a + (phi.b - phi.a)/(1 + exp(-runif(1, min = -2, max = 2)))
+
+
 
     for (i in 1:iter) {
 
       # block update beta
-      betastar <- rnorm(p, sParams[betaindx], sd = exp(sTunings[betaindx])) # draw for proposed beta params
+      betastar <- rnorm(p, sParams[beta_index], sd = exp(sTunings[beta_index])) # draw for proposed beta params
 
-      beta.lfcur <- beta_log_full_conditional(sParams[betaindx], wParams = wParams, X = X,
+      beta.lfcur <- beta_log_full_conditional(sParams[beta_index], wParams = wParams, X = X,
                                               O = O,
                                               beta.b = beta.b,
                                               p = p,
@@ -179,20 +198,20 @@ rrp_glm <- function(fixed,
 
       # this is metropolis hastings step
       if (log(runif(1)) < lr) { # if likelihood ratio is greater than runif(1), accept
-        sParams[betaindx] <- betastar # update params with new guess
-        sAccepts[betaindx] <- sAccepts[betaindx] + 1 # mark we accepted
-        xbeta <- X %*% sParams[betaindx] # update xbeta, which will be used in next set of estimation
+        sParams[beta_index] <- betastar # update params with new guess
+        sAccepts[beta_index] <- sAccepts[beta_index] + 1 # mark we accepted
+        xbeta <- X %*% sParams[beta_index] # update xbeta, which will be used in next set of estimation
       }
 
       # project beta guess to be orthoganal to
-      AParams = sParams[betaindx] - AP %*% u %*% (sqrt(d)*etaParams) # adjust the random effects to get ARRP
+      AParams = sParams[beta_index] - AP %*% u %*% (sqrt(d)*etaParams) # adjust the random effects to get ARRP
 
 
       # guess phi params
-      phistar <-  rnorm(1, sParams[phiindx], sd = exp(sTunings[phiindx]))
-      phi.lfcand <- phi.lfcur <- phi_log_full_conditional(sParams[phiindx], coords = coords, xbeta = xbeta, etaParams = etaParams, U1 = U1, PPERP = PPERP, # data and params
+      phistar <-  rnorm(1, sParams[phi_index], sd = exp(sTunings[phi_index]))
+      phi.lfcand <- phi.lfcur <- phi_log_full_conditional(sParams[phi_index], coords = coords, xbeta = xbeta, etaParams = etaParams, U1 = U1, PPERP = PPERP, # data and params
                                                           O = O, # observations
-                                                          sParams = sParams, s2indx = s2indx, # priors
+                                                          sParams = sParams, sigma2_index = sigma2_index, # priors
                                                           nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
                                                           dens_fun_log = dens_fun_log)
 
@@ -202,7 +221,7 @@ rrp_glm <- function(fixed,
       if (phistar < phi.b & phistar > phi.a) {
         phi.lfcand <- phi_log_full_conditional(phistar, coords = coords, xbeta = xbeta, etaParams = etaParams, U1 = U1, PPERP = PPERP, # data and params
                                                O = O, # observations
-                                               sParams = sParams, s2indx = s2indx, # priors
+                                               sParams = sParams, sigma2_index = sigma2_index, # priors
                                                nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
                                                dens_fun_log = dens_fun_log)
       } else {
@@ -211,8 +230,8 @@ rrp_glm <- function(fixed,
       lr <- phi.lfcand$lr - phi.lfcur$lr
 
       if (log(runif(1)) < lr) {
-        sParams[phiindx] <- phistar
-        sAccepts[phiindx] <- sAccepts[phiindx] + 1
+        sParams[phi_index] <- phistar
+        sAccepts[phi_index] <- sAccepts[phi_index] + 1
         phi.lfcur <- phi.lfcand
         d <- phi.lfcur$d # approximated eigenvalues^2
         U <- phi.lfcur$U # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
@@ -222,9 +241,9 @@ rrp_glm <- function(fixed,
       twKinvw <- phi.lfcur$twKinvw # etaParams cross product for some reason
 
       # update s2
-      s2star <- rnorm(1, sParams[s2indx], sd = exp(sTunings[s2indx]))
+      s2star <- rnorm(1, sParams[sigma2_index], sd = exp(sTunings[sigma2_index]))
       if (s2star > 0) {
-        s2.lfcur <- sigma2_log_full_conditional(sigma2 = sParams[s2indx], twKinvw = twKinvw,
+        s2.lfcur <- sigma2_log_full_conditional(sigma2 = sParams[sigma2_index], twKinvw = twKinvw,
                                                 s2.a = s2.a, s2.b = s2.b,
                                                 rank = rank)
 
@@ -238,8 +257,8 @@ rrp_glm <- function(fixed,
 
 
       if (log(runif(1)) < lr) {
-        sParams[s2indx] <- s2star
-        sAccepts[s2indx] <- sAccepts[s2indx] + 1
+        sParams[sigma2_index] <- s2star
+        sAccepts[sigma2_index] <- sAccepts[sigma2_index] + 1
       }
 
       # update random effects using multivariate random walk with spherical normal proposal
@@ -247,12 +266,12 @@ rrp_glm <- function(fixed,
 
       delta.lfcand <- delta_log_full_conditional(delta = deltastar, xbeta = xbeta,  U = U, d = d,
                                                  O = O,
-                                                 sParams = sParams, s2indx = s2indx,
+                                                 sParams = sParams, sigma2_index = sigma2_index,
                                                  dens_fun_log = dens_fun_log)
 
       delta.lfcur <- delta_log_full_conditional(delta = etaParams, xbeta = xbeta,  U = U, d = d,
                                                 O = O,
-                                                sParams = sParams, s2indx = s2indx,
+                                                sParams = sParams, sigma2_index = sigma2_index,
                                                 dens_fun_log = dens_fun_log)
       lr <- delta.lfcand$lr - delta.lfcur$lr
 
@@ -268,9 +287,9 @@ rrp_glm <- function(fixed,
       samples_w[(k - 1)*iter + i,] <- wParams
       samples_eta[(k - 1)*iter + i,] <- etaParams
 
-      param_draws[i, k, 1:nParams] <- sParams
-      param_draws[i, k, (nParams + 1):(nParams + rank)] <- etaParams
-      param_draws[i, k, (nParams + 1 + rank):(nParams + rank + n)] <- wParams
+      samples[i, k, 1:nParams] <- sParams
+      samples[i, k, (nParams + 1):(nParams + rank)] <- etaParams
+      samples[i, k, (nParams + 1 + rank):(nParams + rank + n)] <- wParams
 
     }
 
@@ -290,6 +309,39 @@ rrp_glm <- function(fixed,
   message("runtime", "\n")
   message(round(as.numeric(runtime, units = "mins"), 3), " minutes\n")
 
+
+  # return(structure(list(coefficients = list(beta = , # median estimates
+  #                                           sigma2 = ,
+  #                                           phi = ,
+  #                                           delta = ,
+  #                                           w = ),
+  #                       adj_coefficeints = , # adjusted (only beta)
+  #                       ses = list(beta = , #mad
+  #                                  sigma2 = ,
+  #                                  phi = ,
+  #                                  delta = ,
+  #                                  w = ),
+  #                       residuals = ,
+  #                       fitted.values = ,
+  #                       linear.predictors = ,
+  #                       covmat = ,
+  #                       family = family,
+  #                       formula_fixed = fixed,
+  #                       formula_spatial = spatial,
+  #                       prior_info = priors,
+  #                       tuning_info = tuning,
+  #                       samples = samples,
+  #                       log_likelihood = ,# log likelihood array for loo
+  #                       model = "rrp/arrp",
+  #                       accept = list(beta = ,
+  #                                     sigma2 = ,
+  #                                     phi = ,
+  #                                     delta = ,
+  #                                     w = )),
+  #                  class = "rsrHonors_rrp_sglm"))
+
+
+
   return(list(run.time = runtime,
               p.params = samples_s ,
               arrp.params = samples_arrp,
@@ -299,7 +351,7 @@ rrp_glm <- function(fixed,
               w.params = samples_w,
               accepts = accept_s,
               acceptw = accept_w,
-              param_draws = param_draws))
+              samples = samples))
 }
 
 # --------------------------------------------------------
@@ -410,18 +462,18 @@ beta_log_full_conditional <- function(beta, wParams, X,
 
 delta_log_full_conditional <- function(delta, xbeta,  U, d,
                                        O,
-                                       sParams, s2indx,
+                                       sParams, sigma2_index,
                                        dens_fun_log){ # delta is rank-m
     w = U %*% (sqrt(d)*delta)
     z <- xbeta + w
     foo2 <- crossprod(delta,delta) # d = D^2 from random projection
-    lf <- sum(dens_fun_log(O, mean = z)) - 1/(2*sParams[s2indx]) * foo2
+    lf <- sum(dens_fun_log(O, mean = z)) - 1/(2*sParams[sigma2_index]) * foo2
     return(list(lr = lf, twKinvw = foo2, w = w))
 }
 
 phi_log_full_conditional <- function(phi, coords, xbeta, etaParams, U1, PPERP, # data and params
                                      O, # observations
-                                     sParams, s2indx, # priors
+                                     sParams, sigma2_index, # priors
                                      nu, n, rk, cores, rank, # control params
                                      dens_fun_log){ # density function
   K1 = rp(phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(cores)) # C++ function for approximating eigenvectors
@@ -438,12 +490,12 @@ phi_log_full_conditional <- function(phi, coords, xbeta, etaParams, U1, PPERP, #
   z <- xbeta + U %*% (sqrt(d)*etaParams) # U is from random projection
   foo2 <- crossprod(etaParams,etaParams)
   lr <- (
-    sum(dens_fun_log(O, mean = z)) - 0.5*1/sParams[s2indx] * foo2 # likelihood
+    sum(dens_fun_log(O, mean = z)) - 0.5*1/sParams[sigma2_index] * foo2 # likelihood
     # + log(phi - phi.a) + log(phi.b - phi) # jacobian
   )
   return(list(lr = lr,d = d,twKinvw = foo2, U = U, u = u))
 }
-# (-s2.a - 1 - rank/2)*log(sParams[s2indx]) - (s2.b + 0.5*twKinvw)/sParams[s2indx]
+# (-s2.a - 1 - rank/2)*log(sParams[sigma2_index]) - (s2.b + 0.5*twKinvw)/sParams[sigma2_index]
 sigma2_log_full_conditional <- function(sigma2, twKinvw,
                                         s2.a, s2.b,
                                         rank) {

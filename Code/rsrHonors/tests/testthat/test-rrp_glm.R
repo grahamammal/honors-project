@@ -117,7 +117,7 @@ test_that("test logistic model runs", {
         mul = 2), "list")
 })
 
-test_that("poisson fit matches spatialPoisson fit", {
+test_that("rrp_glm poisson fit unchanged", {
   starting <- list("beta" = rnorm(4, 5, sd = 0.5),
                    "s2" = 2,
                    "phi" = 0.5)
@@ -169,7 +169,7 @@ test_that("poisson fit matches spatialPoisson fit", {
         priors = priors,
         rank = 10)
 
-  expect_equal(my_fit$p.params, orig_fit$p.params)
+  expect_snapshot_value(round(unname(my_fit$samples[1:500, 1, 1:5]), 4), style = "json2")
 })
 
 test_that("beta full conditional correct", {
@@ -201,7 +201,7 @@ dens_fun_log <- function(x, mean) {dpois(x, lambda = poisson()$linkinv(mean), lo
                             d = d,
                             xbeta = X %*% beta,
                             sParams = 1,
-                            s2indx = 1,
+                            sigma2_index = 1,
                             dens_fun_log = dens_fun_log), style = "serialize")
 })
 
@@ -232,4 +232,4 @@ test_that("phi full conditional correct", {
                             xbeta = X %*% beta,
                             etaParams = -4:5/10,
                             sParams = 1,
-                            s2indx = 1), style = "serialize")})
+                            sigma2_index = 1), style = "serialize")})

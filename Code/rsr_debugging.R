@@ -75,7 +75,7 @@ starting <- list("beta" = coef(linear_model),
 
 tuning   <- list("beta" = c(sqrt(diag(vcov(linear_model)))),
                  "s2" = 0.1,
-                 "phi" = 0.01,
+                 "phi" = 0.05,
                  "w" = 0.1) # set tuning parameters
 
 priors   <- list("beta.normal" = c(100),
@@ -126,5 +126,5 @@ rrp_output <- rrp_glm(
 
 
 mcmc_trace(rrp_output$param_draws,
-           pars = glue("beta_{0:0}"))
+           pars = glue("phi"))
 
