@@ -101,11 +101,11 @@ rrp_glm <- function(fixed,
                                                    paste0("w_", 1:n))))
 
 
-  # current_beta
-  # current_sigma2
-  # current_phi
-  # current_delta
-  # current_w
+  current_beta <- rep(NA_real_, p)
+  current_sigma2 <- NA_real_
+  current_phi <- NA_real_
+  current_delta <- rep(NA_real_, rank)
+  current_w <- rep(NA_real_, rank)
 
   #########################################
   # Orig: feed in the initial values and tuning params
@@ -136,33 +136,6 @@ rrp_glm <- function(fixed,
   accept_w <- matrix(NA, ncol = rank, nrow = chains)
 
 
-  est_start  <- Sys.time()
-  # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm.
-  K = rp(
-            sParams[phi_index], # single number, phi in starting param list
-            coords, #literally x,y coords of obs
-            as.integer(n), # number if interations (iter)
-            as.integer(rk), # rank times mul (what is mul?)
-            nu, #nu as before
-            as.integer(cores)# number of cores
-            ) # C++ function for approximating eigenvectors
-  est_time  <- Sys.time() - est_start # calculates how long one random projection takes
-  message("Estimated time (hrs):",round(niter*2*est_time/3600, 3) ,"\n") # prints out estimate time in hours
-
-  K.rp = list(d = K[[1]],u = K[[2]][,1:rank]) # d is sing values, u is left sing vecs, only take first 1:rank
-  d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
-  U1 <- U <- u <- K.rp$u[,1:rank] # approximated eigenvectors
-  U <- mmC(PPERP,U,as.integer(n),as.integer(rank),as.integer(cores)) # compute PPERP%*%u restrict random effect to be orthogonal to fix effect
-
-  if (is.null(starting[["w"]])) {
-    etaParams <- rep(0,rank)
-    wParams <- U %*% (sqrt(d)*etaParams)
-  }else{
-    wParams <- starting[["w"]]
-    etaParams <- 1/sqrt(d)*(t(U) %*% wParams)
-  }
-
-  xbeta <- X %*% sParams[beta_index]
 
   ##### start MCMC loop #####
   for (k in 1:chains) {
@@ -174,6 +147,32 @@ rrp_glm <- function(fixed,
     sParams[beta_index] <- runif(p, min = -2, max = 2)
     sParams[sigma2_index] <- exp(runif(1, min = -2, max = 2))
     sParams[phi_index] <- phi.a + (phi.b - phi.a)/(1 + exp(-runif(1, min = -2, max = 2)))
+
+
+
+    est_start  <- Sys.time()
+    # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm.
+    K = rp(
+              sParams[phi_index], # single number, phi in starting param list
+              coords, #literally x,y coords of obs
+              as.integer(n), # number if interations (iter)
+              as.integer(rk), # rank times mul (what is mul?)
+              nu, #nu as before
+              as.integer(cores)# number of cores
+              ) # C++ function for approximating eigenvectors
+    est_time  <- Sys.time() - est_start # calculates how long one random projection takes
+    message("Estimated time (hrs):",round((chains - k + 1)*iter*2*est_time/3600, 3) ,"\n") # prints out estimate time in hours
+
+    K.rp = list(d = K[[1]],u = K[[2]][,1:rank]) # d is sing values, u is left sing vecs, only take first 1:rank
+    d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
+    U1 <- U <- u <- K.rp$u[,1:rank] # approximated eigenvectors
+    U <- mmC(PPERP,U,as.integer(n),as.integer(rank),as.integer(cores)) # compute PPERP%*%u restrict random effect to be orthogonal to fix effect
+
+    etaParams <- runif(rank, min = -2, max = 2)
+    wParams <- U %*% (sqrt(d)*etaParams)
+
+
+    xbeta <- X %*% sParams[beta_index]
 
 
 
@@ -290,7 +289,6 @@ rrp_glm <- function(fixed,
       samples[i, k, 1:nParams] <- sParams
       samples[i, k, (nParams + 1):(nParams + rank)] <- etaParams
       samples[i, k, (nParams + 1 + rank):(nParams + rank + n)] <- wParams
-
     }
 
     output_progress(samples_s = samples_s, sAccepts = sAccepts,
