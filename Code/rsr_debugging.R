@@ -106,7 +106,7 @@ model_frame <- lm(~ x1 + x2, data = sim_data, method = "model.frame")
 model_matrix <- model.matrix(model_frame)
 
 
-rrp_glm(
+rrp_output <- rrp_glm(
           fixed = y_pois ~ x1 + x2 + x3,
           spatial = ~ x1 + x2,
           data = sim_data,

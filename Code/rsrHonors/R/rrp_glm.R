@@ -13,6 +13,7 @@ rrp_glm <- function(fixed,
                     rank,
                     mul = 2){ # rank to reduce spatial matrix to
 
+  start_time <- Sys.time()
 
   # Figure out how to interpret the formula fixed fixed
   model_frame <- lm(fixed, data = data, method = "model.frame")
@@ -55,7 +56,7 @@ rrp_glm <- function(fixed,
   #######################################
 
   niter <- iter*chains
-  cat("MCMC chain size:", iter,"\n")
+  message("\nMCMC chain size:", iter, "\n")
 
   #######################################
   # Define prior parameters
@@ -65,52 +66,6 @@ rrp_glm <- function(fixed,
   s2.b   <- priors[["s2.IG"]][2]
   phi.a  <- priors[["phi.Unif"]][1]
   phi.b  <- priors[["phi.Unif"]][2]
-
-  # might be doing gibbs sampler.
-  # Full conditional sounds like gibbs sampler
-  # Might be doing component wise metropolis hastings.
-  #
-
-  # log full conditional of beta
-  # NOTE: should it be (p*beta.b) instead of (2*beta.b)???
-  #
-  # Estimates fixed effects parameters
-  # lf: look at notes
-  beta.lf <- function(beta){
-    z <- X %*% beta + wParams # if rsr, wParams = L%*%eta
-    lf <- sum(dens_fun_log(O, mean = z)) - crossprod(beta)/(p*beta.b)
-    return(lf)
-  }
-  # log full conditional of delta
-
-  delta.lf <- function(delta){ # delta is rank-m
-    w = U %*% (sqrt(d)*delta)
-    z <- xbeta + w
-    foo2 <- crossprod(delta,delta) # d = D^2 from random projection
-    lf <- sum(dens_fun_log(O, mean = z)) - 1/(2*sParams[s2indx]) * foo2
-    return(list(lr = lf, twKinvw = foo2, w = w))
-  }
-
-  phi.lf <- function(phi){
-    K1 = rp(phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(cores)) # C++ function for approximating eigenvectors
-    K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
-    d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
-
-    u <- K.rp$u[,1:rank]
-
-    signdiag = sign(diag(t(u) %*% U1)) # find the sign change
-    signdiag = as.logical(1 - signdiag)
-    u[,signdiag] = -u[,signdiag]
-
-    U <- mmC(PPERP,u,as.integer(n),as.integer(rank),as.integer(cores)) # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
-    z <- xbeta + U %*% (sqrt(d)*etaParams) # U is from random projection
-    foo2 <- crossprod(etaParams,etaParams)
-    lr <- (
-      sum(dens_fun_log(O, mean = z)) - 0.5*1/sParams[s2indx] * foo2 # likelihood
-      # + log(phi - phi.a) + log(phi.b - phi) # jacobian
-    )
-    return(list(lr = lr,d = d,twKinvw = foo2, U = U, u = u))
-  }
 
 
   ###################################
@@ -133,6 +88,15 @@ rrp_glm <- function(fixed,
   samples_w <- matrix(NA,ncol = n,nrow = niter) # store the r.e samples
   samples_arrp <- matrix(NA,ncol = p,nrow = niter)
   sTunings <- sParams <- matrix(NA,nrow = nParams) # update the current parameters for each iteration
+
+  param_draws <- array(dim = c(iter, chains, nParams + rank + n),
+                       dimnames = list("Iteration" = 1:iter,
+                                       "Chain" = 1:chains,
+                                       "Parameter" = c(paste0("beta_", 0:(p - 1)),
+                                                       "sigma2",
+                                                       "phi",
+                                                       paste0("delta_", 1:rank),
+                                                       paste0("w_", 1:n))))
 
 
   #########################################
@@ -160,7 +124,7 @@ rrp_glm <- function(fixed,
   accept_w <- matrix(NA, ncol = rank, nrow = chains)
 
 
-  est.time  <- proc.time()
+  est_start  <- Sys.time()
   # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm.
   K = rp(
             sParams[phiindx], # single number, phi in starting param list
@@ -170,8 +134,8 @@ rrp_glm <- function(fixed,
             nu, #nu as before
             as.integer(cores)# number of cores
             ) # C++ function for approximating eigenvectors
-  est.time  <- proc.time() - est.time # calculates how long one random projection takes
-  cat("Estimated time (hrs):",niter*2*est.time[3]/3600 ,"\n") # prints out estimate time in hours
+  est_time  <- Sys.time() - est_start # calculates how long one random projection takes
+  message("Estimated time (hrs):",niter*2*est_time/3600 ,"\n") # prints out estimate time in hours
 
   K.rp = list(d = K[[1]],u = K[[2]][,1:rank]) # d is sing values, u is left sing vecs, only take first 1:rank
   d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
@@ -198,8 +162,18 @@ rrp_glm <- function(fixed,
 
       # block update beta
       betastar <- rnorm(p, sParams[betaindx], sd = exp(sTunings[betaindx])) # draw for proposed beta params
-      beta.lfcur <- beta.lf(sParams[betaindx]) # log likelihood of current beta params
-      beta.lfcand <- beta.lf(c(betastar)) # log likelihood of proposed beta params
+
+      beta.lfcur <- beta_log_full_conditional(sParams[betaindx], wParams = wParams, X = X,
+                                              O = O,
+                                              beta.b = beta.b,
+                                              p = p,
+                                              dens_fun_log = dens_fun_log)
+
+      beta.lfcand <- beta_log_full_conditional(betastar, wParams = wParams, X = X,
+                                              O = O,
+                                              beta.b = beta.b,
+                                              p = p,
+                                              dens_fun_log = dens_fun_log)
       lr <- beta.lfcand - beta.lfcur # log likelihood ratio log(proposed_likelihood/current_likelihood)
 
 
@@ -213,18 +187,24 @@ rrp_glm <- function(fixed,
       # project beta guess to be orthoganal to
       AParams = sParams[betaindx] - AP %*% u %*% (sqrt(d)*etaParams) # adjust the random effects to get ARRP
 
-      # update phi
-      # phistar <- logit.inv(rnorm(1,logit(sParams[phiindx],phi.a,phi.b),
-      # sd=exp(sTunings[phiindx])),phi.a,phi.b)
 
-      # phi.lfcur <- phi.lf(sParams[phiindx])
-      # phi.lfcand <- phi.lf(phistar)
-
+      # guess phi params
       phistar <-  rnorm(1, sParams[phiindx], sd = exp(sTunings[phiindx]))
-      phi.lfcand <- phi.lfcur <- phi.lf(sParams[phiindx])
+      phi.lfcand <- phi.lfcur <- phi_log_full_conditional(sParams[phiindx], coords = coords, xbeta = xbeta, etaParams = etaParams, U1 = U1, PPERP = PPERP, # data and params
+                                                          O = O, # observations
+                                                          sParams = sParams, s2indx = s2indx, # priors
+                                                          nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
+                                                          dens_fun_log = dens_fun_log)
 
+
+
+      # checks if guess in bounds of Unif(a, b) prior
       if (phistar < phi.b & phistar > phi.a) {
-        phi.lfcand <- phi.lf(phistar)
+        phi.lfcand <- phi_log_full_conditional(phistar, coords = coords, xbeta = xbeta, etaParams = etaParams, U1 = U1, PPERP = PPERP, # data and params
+                                               O = O, # observations
+                                               sParams = sParams, s2indx = s2indx, # priors
+                                               nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
+                                               dens_fun_log = dens_fun_log)
       } else {
         phi.lfcand$lr <- -Inf
       }
@@ -239,13 +219,18 @@ rrp_glm <- function(fixed,
         u <- phi.lfcur$u # approximated eigenvectors
       }
 
-      twKinvw <- phi.lfcur$twKinvw
+      twKinvw <- phi.lfcur$twKinvw # etaParams cross product for some reason
 
       # update s2
       s2star <- rnorm(1, sParams[s2indx], sd = exp(sTunings[s2indx]))
       if (s2star > 0) {
-        s2.lfcur <-  (-s2.a - 1 - rank/2)*log(sParams[s2indx]) - (s2.b + 0.5*twKinvw)/sParams[s2indx]
-        s2.lfcand <-  (-s2.a - 1 - rank/2)*log(s2star) - (s2.b + 0.5*twKinvw)/s2star
+        s2.lfcur <- sigma2_log_full_conditional(sigma2 = sParams[s2indx], twKinvw = twKinvw,
+                                                s2.a = s2.a, s2.b = s2.b,
+                                                rank = rank)
+
+        s2.lfcand <-  sigma2_log_full_conditional(sigma2 = s2star, twKinvw = twKinvw,
+                                                  s2.a = s2.a, s2.b = s2.b,
+                                                  rank = rank)
         lr <- s2.lfcand - s2.lfcur
       } else {
         lr <- -Inf
@@ -257,29 +242,18 @@ rrp_glm <- function(fixed,
         sAccepts[s2indx] <- sAccepts[s2indx] + 1
       }
 
-      #       # update re one-by-one # either this or block update will work
-      #
-      #       deltastar<-etaParams
-      #       delta.lfcur<- delta.lf(etaParams)
-      #       for(j in 1:rank){
-      #         deltastar[j] <- rnorm(1,etaParams[j],exp(wTunings[j]))
-      #         delta.lfcand <- delta.lf(deltastar)
-      #         lr <- delta.lfcand$lr - delta.lfcur$lr
-      #
-      #         if(log(runif(1)) < lr) {
-      #           etaParams[j] <- deltastar[j]
-      #           wAccepts[j] <- wAccepts[j] +1
-      #           delta.lfcur <- delta.lfcand
-      #         } else{
-      #           deltastar[j] <- etaParams[j]
-      #         }
-      #       }.Call("rp", sParams[phiindx]
-      #       wParams <- delta.lfcur$w
-
       # update random effects using multivariate random walk with spherical normal proposal
       deltastar <- rnorm(rank, etaParams, sd = exp(wTunings))
-      delta.lfcand <- delta.lf(deltastar)
-      delta.lfcur <- delta.lf(etaParams)
+
+      delta.lfcand <- delta_log_full_conditional(delta = deltastar, xbeta = xbeta,  U = U, d = d,
+                                                 O = O,
+                                                 sParams = sParams, s2indx = s2indx,
+                                                 dens_fun_log = dens_fun_log)
+
+      delta.lfcur <- delta_log_full_conditional(delta = etaParams, xbeta = xbeta,  U = U, d = d,
+                                                O = O,
+                                                sParams = sParams, s2indx = s2indx,
+                                                dens_fun_log = dens_fun_log)
       lr <- delta.lfcand$lr - delta.lfcur$lr
 
       if (log(runif(1)) < lr) {
@@ -293,16 +267,15 @@ rrp_glm <- function(fixed,
       samples_s[(k - 1)*iter + i,] <- sParams
       samples_w[(k - 1)*iter + i,] <- wParams
       samples_eta[(k - 1)*iter + i,] <- etaParams
+
+      param_draws[i, k, 1:nParams] <- sParams
+      param_draws[i, k, (nParams + 1):(nParams + rank)] <- etaParams
+      param_draws[i, k, (nParams + 1 + rank):(nParams + rank + n)] <- wParams
+
     }
 
-    cat(" Batch ",k,"\n")
-    cat("-------------------------------------------------------\n")
-    cat("----------------est------------------------------------\n")
-    cat(bmmat(samples_s[((k - 1)*iter + 1):(k*iter),])[,1],"\n")
-    cat("-------------------------------------------------------\n")
-
-    cat("acceptance rate:", round(sAccepts/(iter),4),"\n")
-    cat("-------------------------------------------------------\n")
+    output_progress(samples_s = samples_s, sAccepts = sAccepts,
+                    iter = iter, k = k)
 
     accept_s[k,] <- sAccepts/(iter)
     accept_w[k,] <- wAccepts/(iter)
@@ -310,9 +283,12 @@ rrp_glm <- function(fixed,
   }
   accept_s <- apply(accept_s,2,mean)
   accept_w <- apply(accept_w,2,mean)
-  runtime = proc.time() - ptm
-  cat("runtime", "\n")
-  print(runtime)
+
+  stop_time <- Sys.time()
+
+  runtime = stop_time - start_time
+  message("runtime", "\n")
+  message(round(runtime, 2), " seconds\n")
 
   return(list(run.time = runtime,
               p.params = samples_s ,
@@ -322,12 +298,25 @@ rrp_glm <- function(fixed,
               eta.params = samples_eta,
               w.params = samples_w,
               accepts = accept_s,
-              acceptw = accept_w))
+              acceptw = accept_w,
+              param_draws = param_draws))
 }
 
 # --------------------------------------------------------
 # functions from source code:
 # --------------------------------------------------------
+
+output_progress <- function(samples_s, sAccepts,
+                            iter, k) {
+  message("Batch ",k,"\n")
+  message("-------------------------------------------------------\n")
+  message("----------------parameter estimates--------------------\n")
+  message(paste0(round(bmmat(samples_s[((k - 1)*iter + 1):(k*iter),])[,1], 3), collapse = "   "),"\n")
+  message("-------------------------------------------------------\n")
+  message("----------------acceptance rate------------------------\n")
+  message(paste0(round(sAccepts/(iter),3), collapse = "   "),"\n")
+  message("-------------------------------------------------------\n")
+}
 
 # covfndef is in util.r; include all util functions
 # define covariance function
@@ -353,16 +342,6 @@ covfndef <- function(nu){
     return(K)
   }
   return(covfn)
-}
-
-#logit transform
-logit <- function(theta, a, b){log((theta - a)/(b - theta))}
-logit.inv <- function(z, a, b){b - (b - a)/(1 + exp(z))}
-
-# generate inverse gamma random variable
-rinvgamma <- function(n, shape, scale = 1)
-{
-  return(1/rgamma(n = n, shape = shape, rate = scale))
 }
 
 # generate multivariate normal
@@ -419,13 +398,20 @@ bmmat <- function(x)
   bmvals
 }
 
-beta_log_full_conditional <- function(beta, X, wParams, O, p, beta.b, dens_fun_log){
+beta_log_full_conditional <- function(beta, wParams, X,
+                                      O,
+                                      beta.b,
+                                      p,
+                                      dens_fun_log){
     z <- X %*% beta + wParams # if rsr, wParams = L%*%eta
     lf <- sum(dens_fun_log(O, mean = z)) - crossprod(beta)/(p*beta.b)
     return(lf)
 }
 
-delta_log_full_conditional <- function(delta, O, U, d, xbeta, sParams, s2indx, dens_fun_log){ # delta is rank-m
+delta_log_full_conditional <- function(delta, xbeta,  U, d,
+                                       O,
+                                       sParams, s2indx,
+                                       dens_fun_log){ # delta is rank-m
     w = U %*% (sqrt(d)*delta)
     z <- xbeta + w
     foo2 <- crossprod(delta,delta) # d = D^2 from random projection
@@ -433,13 +419,11 @@ delta_log_full_conditional <- function(delta, O, U, d, xbeta, sParams, s2indx, d
     return(list(lr = lf, twKinvw = foo2, w = w))
 }
 
-phi_log_full_conditional <- function(phi,
-                                     coords, O,
-                                     n, rk, nu, cores,
-                                     dens_fun_log,
-                                     U1, PPERP, rank,
-                                     xbeta, etaParams,
-                                     sParams, s2indx){
+phi_log_full_conditional <- function(phi, coords, xbeta, etaParams, U1, PPERP, # data and params
+                                     O, # observations
+                                     sParams, s2indx, # priors
+                                     nu, n, rk, cores, rank, # control params
+                                     dens_fun_log){ # density function
   K1 = rp(phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(cores)) # C++ function for approximating eigenvectors
   K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
   d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
@@ -459,7 +443,12 @@ phi_log_full_conditional <- function(phi,
   )
   return(list(lr = lr,d = d,twKinvw = foo2, U = U, u = u))
 }
-
+# (-s2.a - 1 - rank/2)*log(sParams[s2indx]) - (s2.b + 0.5*twKinvw)/sParams[s2indx]
+sigma2_log_full_conditional <- function(sigma2, twKinvw,
+                                        s2.a, s2.b,
+                                        rank) {
+  (-s2.a - 1 - rank/2)*log(sigma2) - (s2.b + 0.5*twKinvw)/sigma2
+}
 
 # R wrappers to call cpp function for random projection
 rpcpp <- function(r, coords, phi, nu){ # r is demension selected, K,n is loaded from global environment
