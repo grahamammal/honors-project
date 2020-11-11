@@ -135,7 +135,7 @@ rrp_glm <- function(fixed,
             as.integer(cores)# number of cores
             ) # C++ function for approximating eigenvectors
   est_time  <- Sys.time() - est_start # calculates how long one random projection takes
-  message("Estimated time (hrs):",niter*2*est_time/3600 ,"\n") # prints out estimate time in hours
+  message("Estimated time (hrs):",round(niter*2*est_time/3600, 3) ,"\n") # prints out estimate time in hours
 
   K.rp = list(d = K[[1]],u = K[[2]][,1:rank]) # d is sing values, u is left sing vecs, only take first 1:rank
   d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
@@ -288,7 +288,7 @@ rrp_glm <- function(fixed,
 
   runtime = stop_time - start_time
   message("runtime", "\n")
-  message(round(runtime, 2), " seconds\n")
+  message(round(as.numeric(runtime, units = "mins"), 3), " minutes\n")
 
   return(list(run.time = runtime,
               p.params = samples_s ,
