@@ -112,12 +112,6 @@ rrp_glm <- function(fixed,
   # Set starting parameters
   #########################################
 
-  sParams[beta_index] <- starting[["beta"]]
-
-  sParams[sigma2_index] <- starting[["s2"]]
-
-  sParams[phi_index] <- starting[["phi"]]
-
 
   sTunings[beta_index] <- tuning[["beta"]]
   sTunings[sigma2_index] <- tuning[["s2"]]
@@ -144,7 +138,7 @@ rrp_glm <- function(fixed,
 
     # Generate Chain Starting positions following stan recomendation
 
-    sParams[beta_index] <- runif(p, min = -2, max = 2)
+    current_beta <- runif(p, min = -2, max = 2)
     sParams[sigma2_index] <- exp(runif(1, min = -2, max = 2))
     sParams[phi_index] <- phi.a + (phi.b - phi.a)/(1 + exp(-runif(1, min = -2, max = 2)))
 
@@ -172,16 +166,16 @@ rrp_glm <- function(fixed,
     wParams <- U %*% (sqrt(d)*etaParams)
 
 
-    xbeta <- X %*% sParams[beta_index]
+    xbeta <- X %*% current_beta
 
 
 
     for (i in 1:iter) {
 
       # block update beta
-      betastar <- rnorm(p, sParams[beta_index], sd = exp(sTunings[beta_index])) # draw for proposed beta params
+      betastar <- rnorm(p, current_beta, sd = exp(sTunings[beta_index])) # draw for proposed beta params
 
-      beta.lfcur <- beta_log_full_conditional(sParams[beta_index], wParams = wParams, X = X,
+      beta.lfcur <- beta_log_full_conditional(current_beta, wParams = wParams, X = X,
                                               O = O,
                                               beta.b = beta.b,
                                               p = p,
@@ -197,13 +191,14 @@ rrp_glm <- function(fixed,
 
       # this is metropolis hastings step
       if (log(runif(1)) < lr) { # if likelihood ratio is greater than runif(1), accept
-        sParams[beta_index] <- betastar # update params with new guess
+        current_beta <- betastar # update params with new guess
         sAccepts[beta_index] <- sAccepts[beta_index] + 1 # mark we accepted
-        xbeta <- X %*% sParams[beta_index] # update xbeta, which will be used in next set of estimation
+        xbeta <- X %*% current_beta # update xbeta, which will be used in next set of estimation
       }
 
+
       # project beta guess to be orthoganal to
-      AParams = sParams[beta_index] - AP %*% u %*% (sqrt(d)*etaParams) # adjust the random effects to get ARRP
+      AParams = current_beta - AP %*% u %*% (sqrt(d)*etaParams) # adjust the random effects to get ARRP
 
 
       # guess phi params
@@ -282,11 +277,11 @@ rrp_glm <- function(fixed,
       }
 
       samples_arrp[(k - 1)*iter + i,] <- AParams
-      samples_s[(k - 1)*iter + i,] <- sParams
+      samples_s[(k - 1)*iter + i,] <- c(current_beta, sParams[sigma2_index], sParams[phi_index])
       samples_w[(k - 1)*iter + i,] <- wParams
       samples_eta[(k - 1)*iter + i,] <- etaParams
 
-      samples[i, k, 1:nParams] <- sParams
+      samples[i, k, 1:nParams] <- c(current_beta, sParams[sigma2_index], sParams[phi_index])
       samples[i, k, (nParams + 1):(nParams + rank)] <- etaParams
       samples[i, k, (nParams + 1 + rank):(nParams + rank + n)] <- wParams
     }
@@ -453,9 +448,11 @@ beta_log_full_conditional <- function(beta, wParams, X,
                                       beta.b,
                                       p,
                                       dens_fun_log){
+
     z <- X %*% beta + wParams # if rsr, wParams = L%*%eta
     lf <- sum(dens_fun_log(O, mean = z)) - crossprod(beta)/(p*beta.b)
     return(lf)
+
 }
 
 delta_log_full_conditional <- function(delta, xbeta,  U, d,
