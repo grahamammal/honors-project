@@ -200,8 +200,7 @@ dens_fun_log <- function(x, mean) {dpois(x, lambda = poisson()$linkinv(mean), lo
                             U = U,
                             d = d,
                             xbeta = X %*% beta,
-                            sParams = 1,
-                            sigma2_index = 1,
+                            current_sigma2 = 1,
                             dens_fun_log = dens_fun_log), style = "serialize")
 })
 
@@ -231,5 +230,4 @@ test_that("phi full conditional correct", {
                             rank = 10,
                             xbeta = X %*% beta,
                             etaParams = -4:5/10,
-                            sParams = 1,
-                            sigma2_index = 1), style = "serialize")})
+                            current_sigma2 = 1), style = "serialize")})

@@ -139,7 +139,7 @@ rrp_glm <- function(fixed,
     # Generate Chain Starting positions following stan recomendation
 
     current_beta <- runif(p, min = -2, max = 2)
-    sParams[sigma2_index] <- exp(runif(1, min = -2, max = 2))
+    current_sigma2 <- exp(runif(1, min = -2, max = 2))
     sParams[phi_index] <- phi.a + (phi.b - phi.a)/(1 + exp(-runif(1, min = -2, max = 2)))
 
 
@@ -205,7 +205,7 @@ rrp_glm <- function(fixed,
       phistar <-  rnorm(1, sParams[phi_index], sd = exp(sTunings[phi_index]))
       phi.lfcand <- phi.lfcur <- phi_log_full_conditional(sParams[phi_index], coords = coords, xbeta = xbeta, etaParams = etaParams, U1 = U1, PPERP = PPERP, # data and params
                                                           O = O, # observations
-                                                          sParams = sParams, sigma2_index = sigma2_index, # priors
+                                                          current_sigma2 = current_sigma2, # priors
                                                           nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
                                                           dens_fun_log = dens_fun_log)
 
@@ -215,7 +215,7 @@ rrp_glm <- function(fixed,
       if (phistar < phi.b & phistar > phi.a) {
         phi.lfcand <- phi_log_full_conditional(phistar, coords = coords, xbeta = xbeta, etaParams = etaParams, U1 = U1, PPERP = PPERP, # data and params
                                                O = O, # observations
-                                               sParams = sParams, sigma2_index = sigma2_index, # priors
+                                               current_sigma2 = current_sigma2, # priors
                                                nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
                                                dens_fun_log = dens_fun_log)
       } else {
@@ -235,9 +235,9 @@ rrp_glm <- function(fixed,
       twKinvw <- phi.lfcur$twKinvw # etaParams cross product for some reason
 
       # update s2
-      s2star <- rnorm(1, sParams[sigma2_index], sd = exp(sTunings[sigma2_index]))
+      s2star <- rnorm(1, current_sigma2, sd = exp(sTunings[sigma2_index]))
       if (s2star > 0) {
-        s2.lfcur <- sigma2_log_full_conditional(sigma2 = sParams[sigma2_index], twKinvw = twKinvw,
+        s2.lfcur <- sigma2_log_full_conditional(sigma2 = current_sigma2, twKinvw = twKinvw,
                                                 s2.a = s2.a, s2.b = s2.b,
                                                 rank = rank)
 
@@ -251,7 +251,7 @@ rrp_glm <- function(fixed,
 
 
       if (log(runif(1)) < lr) {
-        sParams[sigma2_index] <- s2star
+        current_sigma2 <- s2star
         sAccepts[sigma2_index] <- sAccepts[sigma2_index] + 1
       }
 
@@ -260,12 +260,12 @@ rrp_glm <- function(fixed,
 
       delta.lfcand <- delta_log_full_conditional(delta = deltastar, xbeta = xbeta,  U = U, d = d,
                                                  O = O,
-                                                 sParams = sParams, sigma2_index = sigma2_index,
+                                                 current_sigma2 = current_sigma2,
                                                  dens_fun_log = dens_fun_log)
 
       delta.lfcur <- delta_log_full_conditional(delta = etaParams, xbeta = xbeta,  U = U, d = d,
                                                 O = O,
-                                                sParams = sParams, sigma2_index = sigma2_index,
+                                                current_sigma2 = current_sigma2,
                                                 dens_fun_log = dens_fun_log)
       lr <- delta.lfcand$lr - delta.lfcur$lr
 
@@ -277,11 +277,11 @@ rrp_glm <- function(fixed,
       }
 
       samples_arrp[(k - 1)*iter + i,] <- AParams
-      samples_s[(k - 1)*iter + i,] <- c(current_beta, sParams[sigma2_index], sParams[phi_index])
+      samples_s[(k - 1)*iter + i,] <- c(current_beta, current_sigma2, sParams[phi_index])
       samples_w[(k - 1)*iter + i,] <- wParams
       samples_eta[(k - 1)*iter + i,] <- etaParams
 
-      samples[i, k, 1:nParams] <- c(current_beta, sParams[sigma2_index], sParams[phi_index])
+      samples[i, k, 1:nParams] <- c(current_beta, current_sigma2, sParams[phi_index])
       samples[i, k, (nParams + 1):(nParams + rank)] <- etaParams
       samples[i, k, (nParams + 1 + rank):(nParams + rank + n)] <- wParams
     }
@@ -457,18 +457,18 @@ beta_log_full_conditional <- function(beta, wParams, X,
 
 delta_log_full_conditional <- function(delta, xbeta,  U, d,
                                        O,
-                                       sParams, sigma2_index,
+                                       current_sigma2,
                                        dens_fun_log){ # delta is rank-m
     w = U %*% (sqrt(d)*delta)
     z <- xbeta + w
     foo2 <- crossprod(delta,delta) # d = D^2 from random projection
-    lf <- sum(dens_fun_log(O, mean = z)) - 1/(2*sParams[sigma2_index]) * foo2
+    lf <- sum(dens_fun_log(O, mean = z)) - 1/(2*current_sigma2) * foo2
     return(list(lr = lf, twKinvw = foo2, w = w))
 }
 
 phi_log_full_conditional <- function(phi, coords, xbeta, etaParams, U1, PPERP, # data and params
                                      O, # observations
-                                     sParams, sigma2_index, # priors
+                                     current_sigma2, # priors
                                      nu, n, rk, cores, rank, # control params
                                      dens_fun_log){ # density function
   K1 = rp(phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(cores)) # C++ function for approximating eigenvectors
@@ -485,12 +485,12 @@ phi_log_full_conditional <- function(phi, coords, xbeta, etaParams, U1, PPERP, #
   z <- xbeta + U %*% (sqrt(d)*etaParams) # U is from random projection
   foo2 <- crossprod(etaParams,etaParams)
   lr <- (
-    sum(dens_fun_log(O, mean = z)) - 0.5*1/sParams[sigma2_index] * foo2 # likelihood
+    sum(dens_fun_log(O, mean = z)) - 0.5*1/current_sigma2 * foo2 # likelihood
     # + log(phi - phi.a) + log(phi.b - phi) # jacobian
   )
   return(list(lr = lr,d = d,twKinvw = foo2, U = U, u = u))
 }
-# (-s2.a - 1 - rank/2)*log(sParams[sigma2_index]) - (s2.b + 0.5*twKinvw)/sParams[sigma2_index]
+# (-s2.a - 1 - rank/2)*log(current_sigma2) - (s2.b + 0.5*twKinvw)/current_sigma2
 sigma2_log_full_conditional <- function(sigma2, twKinvw,
                                         s2.a, s2.b,
                                         rank) {
