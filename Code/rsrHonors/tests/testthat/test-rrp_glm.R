@@ -178,7 +178,7 @@ test_that("beta full conditional correct", {
 
   expect_snapshot_value(beta_log_full_conditional(beta = beta,
                             X = X,
-                            wParams = W,
+                            current_w = W,
                             O = y_pois,
                             p = 4,
                             beta.b = 100,
@@ -229,5 +229,5 @@ test_that("phi full conditional correct", {
                             PPERP = PPERP,
                             rank = 10,
                             xbeta = X %*% beta,
-                            etaParams = -4:5/10,
+                            current_delta = -4:5/10,
                             current_sigma2 = 1), style = "serialize")})

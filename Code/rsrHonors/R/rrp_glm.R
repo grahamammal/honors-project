@@ -162,8 +162,8 @@ rrp_glm <- function(fixed,
     U1 <- U <- u <- K.rp$u[,1:rank] # approximated eigenvectors
     U <- mmC(PPERP,U,as.integer(n),as.integer(rank),as.integer(cores)) # compute PPERP%*%u restrict random effect to be orthogonal to fix effect
 
-    etaParams <- runif(rank, min = -2, max = 2)
-    wParams <- U %*% (sqrt(d)*etaParams)
+    current_delta <- runif(rank, min = -2, max = 2)
+    current_w <- U %*% (sqrt(d)*current_delta)
 
 
     xbeta <- X %*% current_beta
@@ -175,13 +175,13 @@ rrp_glm <- function(fixed,
       # block update beta
       betastar <- rnorm(p, current_beta, sd = exp(sTunings[beta_index])) # draw for proposed beta params
 
-      beta.lfcur <- beta_log_full_conditional(current_beta, wParams = wParams, X = X,
+      beta.lfcur <- beta_log_full_conditional(current_beta, current_w = current_w, X = X,
                                               O = O,
                                               beta.b = beta.b,
                                               p = p,
                                               dens_fun_log = dens_fun_log)
 
-      beta.lfcand <- beta_log_full_conditional(betastar, wParams = wParams, X = X,
+      beta.lfcand <- beta_log_full_conditional(betastar, current_w = current_w, X = X,
                                               O = O,
                                               beta.b = beta.b,
                                               p = p,
@@ -198,12 +198,12 @@ rrp_glm <- function(fixed,
 
 
       # project beta guess to be orthoganal to
-      AParams = current_beta - AP %*% u %*% (sqrt(d)*etaParams) # adjust the random effects to get ARRP
+      AParams = current_beta - AP %*% u %*% (sqrt(d)*current_delta) # adjust the random effects to get ARRP
 
 
       # guess phi params
       phistar <-  rnorm(1, current_phi, sd = exp(sTunings[phi_index]))
-      phi.lfcand <- phi.lfcur <- phi_log_full_conditional(current_phi, coords = coords, xbeta = xbeta, etaParams = etaParams, U1 = U1, PPERP = PPERP, # data and params
+      phi.lfcand <- phi.lfcur <- phi_log_full_conditional(current_phi, coords = coords, xbeta = xbeta, current_delta = current_delta, U1 = U1, PPERP = PPERP, # data and params
                                                           O = O, # observations
                                                           current_sigma2 = current_sigma2, # priors
                                                           nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
@@ -213,7 +213,7 @@ rrp_glm <- function(fixed,
 
       # checks if guess in bounds of Unif(a, b) prior
       if (phistar < phi.b & phistar > phi.a) {
-        phi.lfcand <- phi_log_full_conditional(phistar, coords = coords, xbeta = xbeta, etaParams = etaParams, U1 = U1, PPERP = PPERP, # data and params
+        phi.lfcand <- phi_log_full_conditional(phistar, coords = coords, xbeta = xbeta, current_delta = current_delta, U1 = U1, PPERP = PPERP, # data and params
                                                O = O, # observations
                                                current_sigma2 = current_sigma2, # priors
                                                nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
@@ -232,7 +232,7 @@ rrp_glm <- function(fixed,
         u <- phi.lfcur$u # approximated eigenvectors
       }
 
-      twKinvw <- phi.lfcur$twKinvw # etaParams cross product for some reason
+      twKinvw <- phi.lfcur$twKinvw # current_delta cross product for some reason
 
       # update s2
       s2star <- rnorm(1, current_sigma2, sd = exp(sTunings[sigma2_index]))
@@ -256,34 +256,34 @@ rrp_glm <- function(fixed,
       }
 
       # update random effects using multivariate random walk with spherical normal proposal
-      deltastar <- rnorm(rank, etaParams, sd = exp(wTunings))
+      deltastar <- rnorm(rank, current_delta, sd = exp(wTunings))
 
       delta.lfcand <- delta_log_full_conditional(delta = deltastar, xbeta = xbeta,  U = U, d = d,
                                                  O = O,
                                                  current_sigma2 = current_sigma2,
                                                  dens_fun_log = dens_fun_log)
 
-      delta.lfcur <- delta_log_full_conditional(delta = etaParams, xbeta = xbeta,  U = U, d = d,
+      delta.lfcur <- delta_log_full_conditional(delta = current_delta, xbeta = xbeta,  U = U, d = d,
                                                 O = O,
                                                 current_sigma2 = current_sigma2,
                                                 dens_fun_log = dens_fun_log)
       lr <- delta.lfcand$lr - delta.lfcur$lr
 
       if (log(runif(1)) < lr) {
-        etaParams <- deltastar
+        current_delta <- deltastar
         wAccepts <- wAccepts + 1
         delta.lfcur <- delta.lfcand
-        wParams <- delta.lfcur$w
+        current_w <- delta.lfcur$w
       }
 
       samples_arrp[(k - 1)*iter + i,] <- AParams
       samples_s[(k - 1)*iter + i,] <- c(current_beta, current_sigma2, current_phi)
-      samples_w[(k - 1)*iter + i,] <- wParams
-      samples_eta[(k - 1)*iter + i,] <- etaParams
+      samples_w[(k - 1)*iter + i,] <- current_w
+      samples_eta[(k - 1)*iter + i,] <- current_delta
 
       samples[i, k, 1:nParams] <- c(current_beta, current_sigma2, current_phi)
-      samples[i, k, (nParams + 1):(nParams + rank)] <- etaParams
-      samples[i, k, (nParams + 1 + rank):(nParams + rank + n)] <- wParams
+      samples[i, k, (nParams + 1):(nParams + rank)] <- current_delta
+      samples[i, k, (nParams + 1 + rank):(nParams + rank + n)] <- current_w
     }
 
     output_progress(samples_s = samples_s, sAccepts = sAccepts,
@@ -443,13 +443,13 @@ bmmat <- function(x)
   bmvals
 }
 
-beta_log_full_conditional <- function(beta, wParams, X,
+beta_log_full_conditional <- function(beta, current_w, X,
                                       O,
                                       beta.b,
                                       p,
                                       dens_fun_log){
 
-    z <- X %*% beta + wParams # if rsr, wParams = L%*%eta
+    z <- X %*% beta + current_w # if rsr, current_w = L%*%eta
     lf <- sum(dens_fun_log(O, mean = z)) - crossprod(beta)/(p*beta.b)
     return(lf)
 
@@ -466,7 +466,7 @@ delta_log_full_conditional <- function(delta, xbeta,  U, d,
     return(list(lr = lf, twKinvw = foo2, w = w))
 }
 
-phi_log_full_conditional <- function(phi, coords, xbeta, etaParams, U1, PPERP, # data and params
+phi_log_full_conditional <- function(phi, coords, xbeta, current_delta, U1, PPERP, # data and params
                                      O, # observations
                                      current_sigma2, # priors
                                      nu, n, rk, cores, rank, # control params
@@ -482,8 +482,8 @@ phi_log_full_conditional <- function(phi, coords, xbeta, etaParams, U1, PPERP, #
   u[,signdiag] = -u[,signdiag]
 
   U <- mmC(PPERP,u,as.integer(n),as.integer(rank),as.integer(cores)) # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
-  z <- xbeta + U %*% (sqrt(d)*etaParams) # U is from random projection
-  foo2 <- crossprod(etaParams,etaParams)
+  z <- xbeta + U %*% (sqrt(d)*current_delta) # U is from random projection
+  foo2 <- crossprod(current_delta,current_delta)
   lr <- (
     sum(dens_fun_log(O, mean = z)) - 0.5*1/current_sigma2 * foo2 # likelihood
     # + log(phi - phi.a) + log(phi.b - phi) # jacobian
