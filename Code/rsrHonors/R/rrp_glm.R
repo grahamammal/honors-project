@@ -140,14 +140,14 @@ rrp_glm <- function(fixed,
 
     current_beta <- runif(p, min = -2, max = 2)
     current_sigma2 <- exp(runif(1, min = -2, max = 2))
-    sParams[phi_index] <- phi.a + (phi.b - phi.a)/(1 + exp(-runif(1, min = -2, max = 2)))
+    current_phi <- phi.a + (phi.b - phi.a)/(1 + exp(-runif(1, min = -2, max = 2)))
 
 
 
     est_start  <- Sys.time()
     # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm.
     K = rp(
-              sParams[phi_index], # single number, phi in starting param list
+              current_phi, # single number, phi in starting param list
               coords, #literally x,y coords of obs
               as.integer(n), # number if interations (iter)
               as.integer(rk), # rank times mul (what is mul?)
@@ -202,8 +202,8 @@ rrp_glm <- function(fixed,
 
 
       # guess phi params
-      phistar <-  rnorm(1, sParams[phi_index], sd = exp(sTunings[phi_index]))
-      phi.lfcand <- phi.lfcur <- phi_log_full_conditional(sParams[phi_index], coords = coords, xbeta = xbeta, etaParams = etaParams, U1 = U1, PPERP = PPERP, # data and params
+      phistar <-  rnorm(1, current_phi, sd = exp(sTunings[phi_index]))
+      phi.lfcand <- phi.lfcur <- phi_log_full_conditional(current_phi, coords = coords, xbeta = xbeta, etaParams = etaParams, U1 = U1, PPERP = PPERP, # data and params
                                                           O = O, # observations
                                                           current_sigma2 = current_sigma2, # priors
                                                           nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
@@ -224,7 +224,7 @@ rrp_glm <- function(fixed,
       lr <- phi.lfcand$lr - phi.lfcur$lr
 
       if (log(runif(1)) < lr) {
-        sParams[phi_index] <- phistar
+        current_phi <- phistar
         sAccepts[phi_index] <- sAccepts[phi_index] + 1
         phi.lfcur <- phi.lfcand
         d <- phi.lfcur$d # approximated eigenvalues^2
@@ -277,11 +277,11 @@ rrp_glm <- function(fixed,
       }
 
       samples_arrp[(k - 1)*iter + i,] <- AParams
-      samples_s[(k - 1)*iter + i,] <- c(current_beta, current_sigma2, sParams[phi_index])
+      samples_s[(k - 1)*iter + i,] <- c(current_beta, current_sigma2, current_phi)
       samples_w[(k - 1)*iter + i,] <- wParams
       samples_eta[(k - 1)*iter + i,] <- etaParams
 
-      samples[i, k, 1:nParams] <- c(current_beta, current_sigma2, sParams[phi_index])
+      samples[i, k, 1:nParams] <- c(current_beta, current_sigma2, current_phi)
       samples[i, k, (nParams + 1):(nParams + rank)] <- etaParams
       samples[i, k, (nParams + 1 + rank):(nParams + rank + n)] <- wParams
     }
