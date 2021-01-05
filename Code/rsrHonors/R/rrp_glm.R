@@ -483,7 +483,7 @@ phi_log_full_conditional <- function(phi, coords, xbeta, current_delta, U1, PPER
 
   U <- mmC(PPERP,u,as.integer(n),as.integer(rank),as.integer(cores)) # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
   z <- xbeta + U %*% (sqrt(d)*current_delta) # U is from random projection
-  foo2 <- crossprod(current_delta,current_delta)
+  foo2 <- crossprod(current_delta, current_delta)
   lr <- (
     sum(dens_fun_log(O, mean = z)) - 0.5*1/current_sigma2 * foo2 # likelihood
     # + log(phi - phi.a) + log(phi.b - phi) # jacobian
