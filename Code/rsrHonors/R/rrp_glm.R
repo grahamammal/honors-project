@@ -14,7 +14,6 @@ rrp_glm <- function(fixed,
                     mul = 2){ # rank to reduce spatial matrix to
 
   start_time <- Sys.time()
-
   # Figure out how to interpret the formula fixed fixed
   model_frame <- lm(fixed, data = data, method = "model.frame")
   X <- model.matrix(fixed, data = model_frame)
@@ -281,13 +280,13 @@ rrp_glm <- function(fixed,
       samples_w[(k - 1)*iter + i,] <- current_w
       samples_eta[(k - 1)*iter + i,] <- current_delta
 
-      samples[i, k, 1:nParams] <- c(current_beta, current_sigma2, current_phi)
-      samples[i, k, (nParams + 1):(nParams + rank)] <- current_delta
-      samples[i, k, (nParams + 1 + rank):(nParams + rank + n)] <- current_w
+      samples[i, k, 1:nParams] <- c(current_beta, current_sigma2, current_phi) # stores fixed effects draw and variance and spatial range draw
+      samples[i, k, (nParams + 1):(nParams + rank)] <- current_delta # stores draw for synthetic variable of spatial effects
+      samples[i, k, (nParams + 1 + rank):(nParams + rank + n)] <- current_w # stores draw of spatial effect (computed from delta draw)
     }
 
-    output_progress(samples_s = samples_s, sAccepts = sAccepts,
-                    iter = iter, k = k)
+    output_progress(beta_draws = samples[, k, beta_index], sAccepts = sAccepts,
+                    iter = iter, chain = k)
 
     accept_s[k,] <- sAccepts/(iter)
     accept_w[k,] <- wAccepts/(iter)
@@ -324,19 +323,19 @@ rrp_glm <- function(fixed,
   #                       prior_info = priors,
   #                       tuning_info = tuning,
   #                       samples = samples,
-  #                       log_likelihood = ,# log likelihood array for loo
-  #                       model = "rrp/arrp",
+  #                       log_likelihood = ,# log likelihood array for loo?
+  #                       model = "rrp_sglmm",
   #                       accept = list(beta = ,
   #                                     sigma2 = ,
   #                                     phi = ,
   #                                     delta = ,
   #                                     w = )),
-  #                  class = "rsrHonors_rrp_sglm"))
+  #                  class = "rsrHonors_rrp_sglmm"))
 
 
 
   return(list(run.time = runtime,
-              p.params = samples_s ,
+              p.params = samples[, , 1:nParams],
               arrp.params = samples_arrp,
               model = "rrp/arrp",
               rank = rank,
@@ -351,12 +350,12 @@ rrp_glm <- function(fixed,
 # functions from source code:
 # --------------------------------------------------------
 
-output_progress <- function(samples_s, sAccepts,
-                            iter, k) {
-  message("Batch ",k,"\n")
+output_progress <- function(beta_draws, sAccepts,
+                            iter, chain) {
+  message("Chain ",chain,"\n")
   message("-------------------------------------------------------\n")
   message("----------------parameter estimates--------------------\n")
-  message(paste0(round(bmmat(samples_s[((k - 1)*iter + 1):(k*iter),])[,1], 3), collapse = "   "),"\n")
+  message(paste0(round(colMeans(beta_draws), 3), collapse = "   "),"\n")
   message("-------------------------------------------------------\n")
   message("----------------acceptance rate------------------------\n")
   message(paste0(round(sAccepts/(iter),3), collapse = "   "),"\n")
@@ -398,50 +397,6 @@ rmvn <- function(n, mu = 0, V = matrix(1)){
   t(matrix(rnorm(n*p), ncol = p) %*% D + rep(mu, rep(n, p)))
 }
 
-# compute batchmeans, function from R packages batchmeans
-bm <- function(x, size = "sqroot", warn = FALSE)
-{
-  n = length(x)
-  if (n < 1000) {
-    if (warn)
-      warning("too few samples (less than 1,000)")
-    if (n < 10)
-      return(NA)
-  }
-  if (size == "sqroot") {
-    b = floor(sqrt(n))
-    a = floor(n/b)
-  }
-  else if (size == "cuberoot") {
-    b = floor(n^(1/3))
-    a = floor(n/b)
-  }
-  else {
-    if (!is.numeric(size) || size <= 1 || size == Inf)
-      stop("'size' must be a finite numeric quantity larger than 1.")
-    b = floor(size)
-    a = floor(n/b)
-  }
-  y = sapply(1:a, function(k) return(mean(x[((k - 1) * b +
-                                               1):(k * b)])))
-  mu.hat = mean(y)
-  var.hat = b * sum((y - mu.hat)^2)/(a - 1)
-  se = sqrt(var.hat/n)
-  list(est = mu.hat, se = se)
-}
-
-# compute batchmeans, function from R packages batchmeans
-bmmat <- function(x)
-{
-  if (!is.matrix(x) && !is.data.frame(x))
-    stop("'x' must be a matrix or data frame.")
-  num = ncol(x)
-  bmvals = matrix(NA, num, 2)
-  rownames(bmvals) = colnames(x)
-  bmres = apply(x, 2, bm)
-  for (i in 1:num) bmvals[i, ] = c(bmres[[i]]$est, bmres[[i]]$se)
-  bmvals
-}
 
 beta_log_full_conditional <- function(beta, current_w, X,
                                       O,
@@ -497,8 +452,4 @@ sigma2_log_full_conditional <- function(sigma2, twKinvw,
   (-s2.a - 1 - rank/2)*log(sigma2) - (s2.b + 0.5*twKinvw)/sigma2
 }
 
-# R wrappers to call cpp function for random projection
-rpcpp <- function(r, coords, phi, nu){ # r is demension selected, K,n is loaded from global environment
-  n = nrow(coords)
-  rp(phi, coords, as.integer(n), as.integer(r), nu, as.integer(1))
-}
+

@@ -37,6 +37,7 @@ List rp(double phi_r, // phi_starting
         int num_r // number of cores
           ){
 
+
   int i,j,k;
   int n = n_r; // Cast into int
   int r = r_r; // Cast into int
@@ -45,6 +46,8 @@ List rp(double phi_r, // phi_starting
   double nu = nu_r; // cast into double
   double sd0 = 1/sqrt(r); //
   double phi = phi_r; // cast to double
+
+
 
   arma::mat (*covfn) (arma::mat coords, double phi, int n, int num); // allocate create pointer to covariance matrix creating function
   arma::mat K = arma::mat(n, n); // pointer to covariance matrix
