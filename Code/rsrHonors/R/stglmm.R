@@ -75,8 +75,9 @@ stglmm <- function(fixed,
   ####################################
   nParams <- p + 2;
   beta_index <- 1:p;
-  sigma2_index <- p + 1;
-  phi_index <- sigma2_index + 1
+  sigma2_sp_index <- p + 1;
+  sigma2_tm_index <- sigma2_sp_index + 1;
+  phi_index <- sigma2_tm_index + 1
   delta_index <- (nParams + 1):(nParams + rank)
   w_index <- (nParams + rank + 1):(nParams + rank + n)
 
@@ -95,14 +96,14 @@ stglmm <- function(fixed,
                    dimnames = list("Iteration" = 1:iter,
                                    "Chain" = 1:chains,
                                    "Parameter" = c(paste0("beta_", 0:(p - 1)),
-                                                   "sigma2",
+                                                   "sigma2_sp",
                                                    "phi",
                                                    paste0("delta_", 1:rank),
                                                    paste0("w_", 1:n))))
 
 
   current_beta <- rep(NA_real_, p)
-  current_sigma2 <- NA_real_
+  current_sigma2_sp <- NA_real_
   current_phi <- NA_real_
   current_delta <- rep(NA_real_, rank)
   current_w <- rep(NA_real_, rank)
@@ -114,7 +115,7 @@ stglmm <- function(fixed,
 
 
   sTunings[beta_index] <- tuning[["beta"]]
-  sTunings[sigma2_index] <- tuning[["s2"]]
+  sTunings[sigma2_sp_index] <- tuning[["s2"]]
   sTunings[phi_index] <- tuning[["phi"]]
 
 
@@ -139,7 +140,7 @@ stglmm <- function(fixed,
     # Generate Chain Starting positions following stan recomendation
 
     current_beta <- runif(p, min = -2, max = 2)
-    current_sigma2 <- exp(runif(1, min = -2, max = 2))
+    current_sigma2_sp <- exp(runif(1, min = -2, max = 2))
     current_phi <- phi.a + (phi.b - phi.a)/(1 + exp(-runif(1, min = -2, max = 2)))
 
 
@@ -205,7 +206,7 @@ stglmm <- function(fixed,
       phistar <-  rnorm(1, current_phi, sd = exp(sTunings[phi_index]))
       phi.lfcand <- phi.lfcur <- phi_log_full_conditional(current_phi, coords = coords, xbeta = xbeta, current_delta = current_delta, U1 = U1, PPERP = PPERP, # data and params
                                                           O = O, # observations
-                                                          current_sigma2 = current_sigma2, # priors
+                                                          current_sigma2_sp = current_sigma2_sp, # priors
                                                           nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
                                                           dens_fun_log = dens_fun_log)
 
@@ -215,7 +216,7 @@ stglmm <- function(fixed,
       if (phistar < phi.b & phistar > phi.a) {
         phi.lfcand <- phi_log_full_conditional(phistar, coords = coords, xbeta = xbeta, current_delta = current_delta, U1 = U1, PPERP = PPERP, # data and params
                                                O = O, # observations
-                                               current_sigma2 = current_sigma2, # priors
+                                               current_sigma2_sp = current_sigma2_sp, # priors
                                                nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
                                                dens_fun_log = dens_fun_log)
       } else {
@@ -235,24 +236,24 @@ stglmm <- function(fixed,
       twKinvw <- phi.lfcur$twKinvw # current_delta cross product for some reason
 
       # update s2
-      s2star <- rnorm(1, current_sigma2, sd = exp(sTunings[sigma2_index]))
-      if (s2star > 0) {
-        s2.lfcur <- sigma2_log_full_conditional(sigma2 = current_sigma2, twKinvw = twKinvw,
+      s2_sp_proposal <- rnorm(1, current_sigma2_sp, sd = exp(sTunings[sigma2_sp_index]))
+      if (s2_sp_proposal > 0) {
+        s2_sp_current_like <- sigma2_sp_log_full_conditional(sigma2_sp = current_sigma2_sp, twKinvw = twKinvw,
                                                 s2.a = s2.a, s2.b = s2.b,
                                                 rank = rank)
 
-        s2.lfcand <-  sigma2_log_full_conditional(sigma2 = s2star, twKinvw = twKinvw,
+        s2_sp_proposal_like <-  sigma2_sp_log_full_conditional(sigma2_sp = s2_sp_proposal, twKinvw = twKinvw,
                                                   s2.a = s2.a, s2.b = s2.b,
                                                   rank = rank)
-        lr <- s2.lfcand - s2.lfcur
+        lr <- s2_sp_proposal_like - s2_sp_current_like
       } else {
         lr <- -Inf
       }
 
 
       if (log(runif(1)) < lr) {
-        current_sigma2 <- s2star
-        sAccepts[sigma2_index] <- sAccepts[sigma2_index] + 1
+        current_sigma2_sp <- s2_sp_proposal
+        sAccepts[sigma2_sp_index] <- sAccepts[sigma2_sp_index] + 1
       }
 
       # update random effects using multivariate random walk with spherical normal proposal
@@ -260,12 +261,12 @@ stglmm <- function(fixed,
 
       delta.lfcand <- delta_log_full_conditional(delta = deltastar, xbeta = xbeta,  U = U, d = d,
                                                  O = O,
-                                                 current_sigma2 = current_sigma2,
+                                                 current_sigma2_sp = current_sigma2_sp,
                                                  dens_fun_log = dens_fun_log)
 
       delta.lfcur <- delta_log_full_conditional(delta = current_delta, xbeta = xbeta,  U = U, d = d,
                                                 O = O,
-                                                current_sigma2 = current_sigma2,
+                                                current_sigma2_sp = current_sigma2_sp,
                                                 dens_fun_log = dens_fun_log)
       lr <- delta.lfcand$lr - delta.lfcur$lr
 
@@ -277,11 +278,11 @@ stglmm <- function(fixed,
       }
 
       samples_arrp[(k - 1)*iter + i,] <- AParams
-      samples_s[(k - 1)*iter + i,] <- c(current_beta, current_sigma2, current_phi)
+      samples_s[(k - 1)*iter + i,] <- c(current_beta, current_sigma2_sp, current_phi)
       samples_w[(k - 1)*iter + i,] <- current_w
       samples_eta[(k - 1)*iter + i,] <- current_delta
 
-      samples[i, k, 1:nParams] <- c(current_beta, current_sigma2, current_phi) # stores fixed effects draw and variance and spatial range draw
+      samples[i, k, 1:nParams] <- c(current_beta, current_sigma2_sp, current_phi) # stores fixed effects draw and variance and spatial range draw
       samples[i, k, (nParams + 1):(nParams + rank)] <- current_delta # stores draw for synthetic variable of spatial effects
       samples[i, k, (nParams + 1 + rank):(nParams + rank + n)] <- current_w # stores draw of spatial effect (computed from delta draw)
     }
@@ -363,32 +364,6 @@ output_progress <- function(beta_draws, sAccepts,
   message("-------------------------------------------------------\n")
 }
 
-# covfndef is in util.r; include all util functions
-# define covariance function
-covfndef <- function(nu){
-  # exponential
-  if (nu == 1/2) covfn <- function(dist,phi) {
-    K = exp(-1/phi*dist)
-    return(K)
-  }
-  # matern 1.5
-  if (nu == 1.5) covfn <- function(dist,phi) {
-    K = (1 + sqrt(3)/phi*dist)*exp(-sqrt(3)/phi*dist)
-    return(K)
-  }
-  # matern 2.5
-  if (nu == 2.5 ) covfn <- function(dist,phi) {
-    K = (1 + sqrt(5)/phi*dist + 5/(3*phi^2)*dist^2)*exp(-sqrt(5)/phi*dist)
-    return(K)
-  }
-  # square exponential
-  if (nu == 10) covfn <- function(dist,phi) {
-    K = exp(-1/(2*phi^2)*dist^2)
-    return(K)
-  }
-  return(covfn)
-}
-
 
 beta_log_full_conditional <- function(beta, current_w, X,
                                       O,
@@ -413,7 +388,7 @@ delta_log_full_conditional <- function(delta, xbeta,  U, d,
   return(list(lr = lf, twKinvw = foo2, w = w))
 }
 
-phi_log_full_conditional <- function(phi, coords, xbeta, current_delta, U1, PPERP, # data and params
+phi_sp_log_full_conditional <- function(phi, coords, xbeta, current_delta, U1, PPERP, # data and params
                                      O, # observations
                                      current_sigma2, # priors
                                      nu, n, rk, cores, rank, # control params
@@ -438,10 +413,41 @@ phi_log_full_conditional <- function(phi, coords, xbeta, current_delta, U1, PPER
   return(list(lr = lr,d = d,twKinvw = foo2, U = U, u = u))
 }
 # (-s2.a - 1 - rank/2)*log(current_sigma2) - (s2.b + 0.5*twKinvw)/current_sigma2
-sigma2_log_full_conditional <- function(sigma2, twKinvw,
+sigma2_sp_log_full_conditional <- function(sigma2, twKinvw,
                                         s2.a, s2.b,
                                         rank) {
   (-s2.a - 1 - rank/2)*log(sigma2) - (s2.b + 0.5*twKinvw)/sigma2
 }
 
+
+phi_tm_log_full_conditional <- function(phi, coords, xbeta, current_delta, U1, PPERP, # data and params
+                                        O, # observations
+                                        current_sigma2, # priors
+                                        nu, n, rk, cores, rank, # control params
+                                        dens_fun_log){ # density function
+  K1 = rp(phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(cores)) # C++ function for approximating eigenvectors
+  K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
+  d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
+
+  u <- K.rp$u[,1:rank]
+
+  signdiag = sign(diag(t(u) %*% U1)) # find the sign change
+  signdiag = as.logical(1 - signdiag)
+  u[,signdiag] = -u[,signdiag]
+
+  U <- mmC(PPERP,u,as.integer(n),as.integer(rank),as.integer(cores)) # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
+  z <- xbeta + U %*% (sqrt(d)*current_delta) # U is from random projection
+  foo2 <- crossprod(current_delta, current_delta)
+  lr <- (
+    sum(dens_fun_log(O, mean = z)) - 0.5*1/current_sigma2 * foo2 # likelihood
+    # + log(phi - phi.a) + log(phi.b - phi) # jacobian
+  )
+  return(list(lr = lr,d = d,twKinvw = foo2, U = U, u = u))
+}
+# (-s2.a - 1 - rank/2)*log(current_sigma2) - (s2.b + 0.5*twKinvw)/current_sigma2
+sigma2_tm_log_full_conditional <- function(sigma2_tm, twKinvw,
+                                           s2.a, s2.b,
+                                           rank) {
+  (-s2.a - 1 - rank/2)*log(sigma2) - (s2.b + 0.5*twKinvw)/sigma2
+}
 
