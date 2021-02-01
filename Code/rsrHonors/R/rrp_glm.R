@@ -248,47 +248,47 @@ rrp_glm <- function(fixed,
       #########################################################
 
       sigma2_proposal <- rnorm(1, current_sigma2, sd = exp(sTunings[sigma2_index]))
-      if (s2star > 0) {
-        s2.lfcur <- sigma2_log_full_conditional(sigma2 = current_sigma2, twKinvw = twKinvw,
+      if (sigma2_proposal > 0) {
+        sigma2_current_likelihood <- sigma2_log_full_conditional(sigma2 = current_sigma2, twKinvw = twKinvw,
                                                 s2.a = s2.a, s2.b = s2.b,
                                                 rank = rank)
 
-        s2.lfcand <-  sigma2_log_full_conditional(sigma2 = s2star, twKinvw = twKinvw,
+        sigma2_proposal_likelihood <-  sigma2_log_full_conditional(sigma2 = sigma2_proposal, twKinvw = twKinvw,
                                                   s2.a = s2.a, s2.b = s2.b,
                                                   rank = rank)
-        lr <- s2.lfcand - s2.lfcur
+        sigma2_lr <- sigma2_proposal_likelihood - sigma2_current_likelihood
       } else {
-        lr <- -Inf
+        sigma2_lr <- -Inf
       }
 
       #########################################################
       # Block Update Delta
       #########################################################
 
-      if (log(runif(1)) < lr) {
-        current_sigma2 <- s2star
+      if (log(runif(1)) < sigma2_lr) {
+        current_sigma2 <- sigma2_proposal
         sAccepts[sigma2_index] <- sAccepts[sigma2_index] + 1
       }
 
       # update random effects using multivariate random walk with spherical normal proposal
-      deltastar <- rnorm(rank, current_delta, sd = exp(wTunings))
+      delta_proposal <- rnorm(rank, current_delta, sd = exp(wTunings))
 
-      delta.lfcand <- delta_log_full_conditional(delta = deltastar, xbeta = xbeta,  U = U, d = d,
+      delta_proposal_likelihood <- delta_log_full_conditional(delta = delta_proposal, xbeta = xbeta,  U = U, d = d,
                                                  O = O,
                                                  current_sigma2 = current_sigma2,
                                                  dens_fun_log = dens_fun_log)
 
-      delta.lfcur <- delta_log_full_conditional(delta = current_delta, xbeta = xbeta,  U = U, d = d,
+      delta_current_likelihood <- delta_log_full_conditional(delta = current_delta, xbeta = xbeta,  U = U, d = d,
                                                 O = O,
                                                 current_sigma2 = current_sigma2,
                                                 dens_fun_log = dens_fun_log)
-      lr <- delta.lfcand$lr - delta.lfcur$lr
+      delta_lr <- delta_proposal_likelihood$lr - delta_current_likelihood$lr
 
-      if (log(runif(1)) < lr) {
-        current_delta <- deltastar
+      if (log(runif(1)) < delta_lr) {
+        current_delta <- delta_proposal
         wAccepts <- wAccepts + 1
-        delta.lfcur <- delta.lfcand
-        current_w <- delta.lfcur$w
+        delta_current_likelihood <- delta_proposal_likelihood
+        current_w <- delta_current_likelihood$w
       }
 
       samples_arrp[(k - 1)*iter + i,] <- AParams
