@@ -439,22 +439,23 @@ sigma2_sp_log_full_conditional <- function(sigma2, twKinvw,
 
 alpha_log_full_conditional <- function(delta, xbeta,  U, d,
                                        O,
+                                       n_s,
                                        current_sigma2,
                                        dens_fun_log){ # delta is rank-m
-  w = U %*% (sqrt(d)*delta)
-  z <- xbeta + w
+  v = U %*% (sqrt(d)*delta)
+  z <- xbeta + rep(v, each = n_s)
   foo2 <- crossprod(delta,delta) # d = D^2 from random projection
   lf <- sum(dens_fun_log(O, mean = z)) - 1/(2*current_sigma2) * foo2
-  return(list(lr = lf, twKinvw = foo2, w = w))
+  return(list(lr = lf, twKinvw = foo2, v = v))
 }
 
-phi_tm_log_full_conditional <- function(phi, locations, xbeta, current_delta, U1, # data and params
+phi_tm_log_full_conditional <- function(phi, times, xbeta, current_delta, U1, # data and params
                                         O, # observations
                                         current_sigma2, # priors
-                                        nu, n, rk, cores, rank, # control params
+                                        nu, n_s, n_t, rk, cores, rank, # control params
                                         dens_fun_log){ # density function
 
-  K1 = rp(phi,locations,as.integer(n) ,as.integer(rk),nu,as.integer(cores)) # C++ function for approximating eigenvectors
+  K1 = rp(phi, times, n_t, as.integer(rk), nu,as.integer(cores)) # C++ function for approximating eigenvectors
   K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
   d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
 
@@ -465,7 +466,7 @@ phi_tm_log_full_conditional <- function(phi, locations, xbeta, current_delta, U1
   u[,signdiag] = -u[,signdiag]
 
   U <- u # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
-  z <- xbeta + U %*% (sqrt(d)*current_delta) # U is from random projection
+  z <- xbeta + rep(U %*% (sqrt(d)*current_delta), each = n_s) # U is from random projection
   foo2 <- crossprod(current_delta, current_delta)
   likelihood <- (
     sum(dens_fun_log(O, mean = z)) - 0.5*1/current_sigma2 * foo2 # likelihood

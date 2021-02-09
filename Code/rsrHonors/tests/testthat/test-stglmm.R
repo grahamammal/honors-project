@@ -162,10 +162,11 @@ test_that("stglmm delta full conditional correct", {
   U <- cov_eigen$vectors[,1:10]
   d <- cov_eigen$values[1:10] ^ 2
 
-  expect_snapshot_value(delta_log_full_conditional(delta = -4:5/10,
+  expect_snapshot_value(delta_log_full_conditional_st(delta = -4:5/10,
                                                    O = y_pois,
                                                    U = U,
                                                    d = d,
+                                                   n_t = n_t,
                                                    xbeta = X %*% beta,
                                                    current_sigma2 = 1,
                                                    dens_fun_log = dens_fun_log), style = "serialize")
@@ -223,20 +224,16 @@ test_that("stglmm phi_tm full conditional correct", {
   U <- cov_eigen$vectors[,1:10]
   d <- cov_eigen$values[1:10] ^ 2
 
-  AP = chol2inv(chol(crossprod(X,X))) %*% t(X) # projection onto column space of X
-  PPERP <- diag(n_t) - X %*% AP # projection onto space orthogonal to column space of X
-
-
   expect_snapshot_value(phi_tm_log_full_conditional(phi = 0.2,
-                                                    coords = cbind(x1, x2),
+                                                    times = time,
                                                     O = y_pois,
-                                                    n = n_t,
+                                                    n_s = n_s,
+                                                    n_t = n_t,
                                                     rk = 10,
                                                     nu = nu,
                                                     cores = 1,
                                                     dens_fun_log = dens_fun_log,
                                                     U1 = U,
-                                                    PPERP = PPERP,
                                                     rank = 10,
                                                     xbeta = X %*% beta,
                                                     current_delta = -4:5/10,
