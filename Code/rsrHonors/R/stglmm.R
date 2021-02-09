@@ -1,7 +1,7 @@
 stglmm <- function(fixed,
-                   spatial,
-                   temporal,
                    data,
+                   locations,
+                   times,
                    family,
                    covfn,
                    iter,
@@ -36,9 +36,10 @@ stglmm <- function(fixed,
     dens_fun_log <- function(x, mean) {dbinom(x, size = 1, prob = family$linkinv(mean), log = TRUE)}
   }
 
+  if(class(locations) == "data.frame") {
+    locations = as.matrix(locations)
+  }
 
-  # Spatial effect
-  coords <- as.matrix(lm(spatial, data = data, method = "model.frame"))
 
   # TODO: change this to param_start, then figure out how to get rid of it
 
@@ -48,8 +49,8 @@ stglmm <- function(fixed,
   n <- length(O) # number of observations
   rk = rank*mul # rank of approximation matrix
   AP = chol2inv(chol(crossprod(X,X))) %*% t(X) # projection onto column space of X
-  PPERP <- diag(n) - X %*% AP # projection onto space orthogonal to column space of X
-
+  n_s <- nrow(locations)
+  n_t <- length(time)
 
   #######################################
   # Prepare MCMC iteration values
@@ -87,7 +88,6 @@ stglmm <- function(fixed,
   samples_eta <- matrix(NA,ncol = rank,nrow = niter) # store the r.e samples
   samples_s <- matrix(NA,ncol = nParams,nrow = niter) # store the parameter samples
   samples_w <- matrix(NA,ncol = n,nrow = niter) # store the r.e samples
-  samples_arrp <- matrix(NA,ncol = p,nrow = niter)
   sTunings <- sParams <- matrix(NA,nrow = nParams) # update the current parameters for each iteration
 
 
@@ -148,8 +148,8 @@ stglmm <- function(fixed,
     # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm.
     K = rp(
       current_phi, # single number, phi in starting param list
-      coords, #literally x,y coords of obs
-      as.integer(n), # number if interations (iter)
+      locations, #literally x,y locations of obs
+      n_s, # number if interations (iter)
       as.integer(rk), # rank times mul (what is mul?)
       nu, #nu as before
       as.integer(cores)# number of cores
@@ -160,7 +160,6 @@ stglmm <- function(fixed,
     K.rp = list(d = K[[1]],u = K[[2]][,1:rank]) # d is sing values, u is left sing vecs, only take first 1:rank
     d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
     U1 <- U <- u <- K.rp$u[,1:rank] # approximated eigenvectors
-    U <- mmC(PPERP,U,as.integer(n),as.integer(rank),as.integer(cores)) # compute PPERP%*%u restrict random effect to be orthogonal to fix effect
 
     current_delta <- runif(rank, min = -2, max = 2)
     current_w <- U %*% (sqrt(d)*current_delta)
@@ -181,17 +180,19 @@ stglmm <- function(fixed,
       beta_proposal <- rnorm(p, current_beta, sd = exp(sTunings[beta_index])) # draw for proposed beta params
 
       # calculate likelihood ratio
-      beta_current_likelihood <- beta_log_full_conditional(current_beta, current_w = current_w, X = X,
+      beta_current_likelihood <- beta_log_full_conditional_st(current_beta, current_w = current_w, X = X,
                                                            O = O,
                                                            beta.b = beta.b,
                                                            p = p,
-                                                           dens_fun_log = dens_fun_log)
+                                                           dens_fun_log = dens_fun_log,
+                                                           n_t = n_t)
 
-      beta_proposal_likelihood <- beta_log_full_conditional(beta_proposal, current_w = current_w, X = X,
+      beta_proposal_likelihood <- beta_log_full_conditional_st(beta_proposal, current_w = current_w, X = X,
                                                             O = O,
                                                             beta.b = beta.b,
                                                             p = p,
-                                                            dens_fun_log = dens_fun_log)
+                                                            dens_fun_log = dens_fun_log,
+                                                            n_t = n_t)
       beta_lr <- beta_proposal_likelihood - beta_current_likelihood # log likelihood ratio log(proposed_likelihood/current_likelihood)
 
 
@@ -202,31 +203,26 @@ stglmm <- function(fixed,
         xbeta <- X %*% current_beta # update xbeta, which will be used in next set of estimation
       }
 
-
-      # project beta guess to be orthogonal to spatial effect
-      AParams = current_beta - AP %*% u %*% (sqrt(d)*current_delta) # adjust the random effects to get ARRP
-
-
       #########################################################
       # Block Update Phi
       #########################################################
 
       # propose from normal
       phi_proposal <-  rnorm(1, current_phi, sd = exp(sTunings[phi_index]))
-      phi_proposal_likelihood <- phi_current_likelihood <- phi_log_full_conditional(current_phi, coords = coords, xbeta = xbeta, current_delta = current_delta, U1 = U1, PPERP = PPERP, # data and params
+      phi_proposal_likelihood <- phi_current_likelihood <- phi_sp_log_full_conditional(current_phi, locations = locations, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
                                                                                     O = O, # observations
                                                                                     current_sigma2 = current_sigma2, # priors
-                                                                                    nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
+                                                                                    nu = nu, n_s = n_s, n_t = n_t, rk = rk, cores = cores, rank = rank, # control params
                                                                                     dens_fun_log = dens_fun_log)
 
 
 
       # checks if guess in bounds of Unif(a, b) prior
       if (phi_proposal < phi.b & phi_proposal > phi.a) {
-        phi_proposal_likelihood <- phi_log_full_conditional(phi_proposal, coords = coords, xbeta = xbeta, current_delta = current_delta, U1 = U1, PPERP = PPERP, # data and params
+        phi_proposal_likelihood <- phi_sp_log_full_conditional(phi_proposal, locations = locations, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
                                                             O = O, # observations
                                                             current_sigma2 = current_sigma2, # priors
-                                                            nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
+                                                            nu = nu, n_s = n_s, n_t = n_t, rk = rk, cores = cores, rank = rank, # control params
                                                             dens_fun_log = dens_fun_log)
       } else {
         phi_proposal_likelihood$likelihood <- -Inf
@@ -274,13 +270,15 @@ stglmm <- function(fixed,
       # update random effects using multivariate random walk with spherical normal proposal
       delta_proposal <- rnorm(rank, current_delta, sd = exp(wTunings))
 
-      delta_proposal_likelihood <- delta_log_full_conditional(delta = delta_proposal, xbeta = xbeta,  U = U, d = d,
+      delta_proposal_likelihood <- delta_log_full_conditional_st(delta = delta_proposal, xbeta = xbeta,  U = U, d = d,
                                                               O = O,
+                                                              n_t = n_t,
                                                               current_sigma2 = current_sigma2,
                                                               dens_fun_log = dens_fun_log)
 
-      delta_current_likelihood <- delta_log_full_conditional(delta = current_delta, xbeta = xbeta,  U = U, d = d,
+      delta_current_likelihood <- delta_log_full_conditional_st(delta = current_delta, xbeta = xbeta,  U = U, d = d,
                                                              O = O,
+                                                             n_t = n_t,
                                                              current_sigma2 = current_sigma2,
                                                              dens_fun_log = dens_fun_log)
       delta_lr <- delta_proposal_likelihood$lr - delta_current_likelihood$lr
@@ -292,7 +290,6 @@ stglmm <- function(fixed,
         current_w <- delta_current_likelihood$w
       }
 
-      samples_arrp[(k - 1)*iter + i,] <- AParams
       samples_s[(k - 1)*iter + i,] <- c(current_beta, current_sigma2, current_phi)
       samples_w[(k - 1)*iter + i,] <- current_w
       samples_eta[(k - 1)*iter + i,] <- current_delta
@@ -353,7 +350,6 @@ stglmm <- function(fixed,
 
   return(list(run.time = runtime,
               p.params = samples[, , 1:nParams],
-              arrp.params = samples_arrp,
               model = "rrp/arrp",
               rank = rank,
               eta.params = samples_eta,
@@ -379,19 +375,69 @@ output_progress <- function(beta_draws, sAccepts,
   message("-------------------------------------------------------\n")
 }
 
-beta_log_full_conditional <- function(beta, current_w, X,
+beta_log_full_conditional_st <- function(beta, current_w, X,
                                       O,
                                       beta.b,
                                       p,
-                                      dens_fun_log){
+                                      dens_fun_log,
+                                      n_t){
 
-  z <- X %*% beta + current_w # if rsr, current_w = L%*%eta
+  z <- X %*% beta + rep(current_w, times = n_t) # if rsr, current_w = L%*%eta
   lf <- sum(dens_fun_log(O, mean = z)) - crossprod(beta)/(p*beta.b)
   return(lf)
 
 }
 
-delta_log_full_conditional <- function(delta, xbeta,  U, d,
+delta_log_full_conditional_st <- function(delta, xbeta,  U, d,
+                                       O,
+                                       n_t,
+                                       current_sigma2,
+                                       dens_fun_log){ # delta is rank-m
+  w = U %*% (sqrt(d)*delta)
+  z <- xbeta + rep(w, n_t)
+  foo2 <- crossprod(delta,delta) # d = D^2 from random projection
+  lf <- sum(dens_fun_log(O, mean = z)) - 1/(2*current_sigma2) * foo2
+  return(list(lr = lf, twKinvw = foo2, w = w))
+}
+
+phi_sp_log_full_conditional <- function(phi, locations, xbeta, current_delta, U1, # data and params
+                                     O, # observations
+                                     current_sigma2, # priors
+                                     nu, n_s, n_t, rk, cores, rank, # control params
+                                     dens_fun_log){ # density function
+  K1 = rp(phi,
+          locations,
+          n_s,
+          as.integer(rk),
+          nu,
+          as.integer(cores)) # C++ function for approximating eigenvectors
+
+  K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
+  d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
+
+  u <- K.rp$u[,1:rank]
+
+  signdiag = sign(diag(t(u) %*% U1)) # find the sign change
+  signdiag = as.logical(1 - signdiag)
+  u[,signdiag] = -u[,signdiag]
+
+  U <- u
+  z <- xbeta + rep(U %*% (sqrt(d)*current_delta), n_t) # U is from random projection
+  foo2 <- crossprod(current_delta, current_delta)
+  likelihood <- (
+    sum(dens_fun_log(O, mean = z)) - 0.5*1/current_sigma2 * foo2 # likelihood
+    # + log(phi - phi.a) + log(phi.b - phi) # jacobian
+  )
+  return(list(likelihood = likelihood, d = d, twKinvw = foo2, U = U, u = u))
+}
+# (-s2.a - 1 - rank/2)*log(current_sigma2) - (s2.b + 0.5*twKinvw)/current_sigma2
+sigma2_sp_log_full_conditional <- function(sigma2, twKinvw,
+                                        s2.a, s2.b,
+                                        rank) {
+  (-s2.a - 1 - rank/2)*log(sigma2) - (s2.b + 0.5*twKinvw)/sigma2
+}
+
+alpha_log_full_conditional <- function(delta, xbeta,  U, d,
                                        O,
                                        current_sigma2,
                                        dens_fun_log){ # delta is rank-m
@@ -402,12 +448,13 @@ delta_log_full_conditional <- function(delta, xbeta,  U, d,
   return(list(lr = lf, twKinvw = foo2, w = w))
 }
 
-phi_log_full_conditional <- function(phi, coords, xbeta, current_delta, U1, PPERP, # data and params
-                                     O, # observations
-                                     current_sigma2, # priors
-                                     nu, n, rk, cores, rank, # control params
-                                     dens_fun_log){ # density function
-  K1 = rp(phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(cores)) # C++ function for approximating eigenvectors
+phi_tm_log_full_conditional <- function(phi, locations, xbeta, current_delta, U1, # data and params
+                                        O, # observations
+                                        current_sigma2, # priors
+                                        nu, n, rk, cores, rank, # control params
+                                        dens_fun_log){ # density function
+
+  K1 = rp(phi,locations,as.integer(n) ,as.integer(rk),nu,as.integer(cores)) # C++ function for approximating eigenvectors
   K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
   d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
 
@@ -417,7 +464,7 @@ phi_log_full_conditional <- function(phi, coords, xbeta, current_delta, U1, PPER
   signdiag = as.logical(1 - signdiag)
   u[,signdiag] = -u[,signdiag]
 
-  U <- mmC(PPERP,u,as.integer(n),as.integer(rank),as.integer(cores)) # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
+  U <- u # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
   z <- xbeta + U %*% (sqrt(d)*current_delta) # U is from random projection
   foo2 <- crossprod(current_delta, current_delta)
   likelihood <- (
@@ -427,10 +474,11 @@ phi_log_full_conditional <- function(phi, coords, xbeta, current_delta, U1, PPER
   return(list(likelihood = likelihood, d = d, twKinvw = foo2, U = U, u = u))
 }
 # (-s2.a - 1 - rank/2)*log(current_sigma2) - (s2.b + 0.5*twKinvw)/current_sigma2
-sigma2_log_full_conditional <- function(sigma2, twKinvw,
-                                        s2.a, s2.b,
-                                        rank) {
+sigma2_tm_log_full_conditional <- function(sigma2, twKinvw,
+                                           s2.a, s2.b,
+                                           rank) {
   (-s2.a - 1 - rank/2)*log(sigma2) - (s2.b + 0.5*twKinvw)/sigma2
 }
+
 
 
