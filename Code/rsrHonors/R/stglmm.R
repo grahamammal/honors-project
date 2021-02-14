@@ -65,8 +65,12 @@ stglmm <- function(fixed,
   # Define prior parameters
   #######################################
   beta.b <- priors[["beta.normal"]]
-  s2.a   <- priors[["s2.IG"]][1]
-  s2.b   <- priors[["s2.IG"]][2]
+  s2_sp_a   <- priors[["s2_sp_IG"]][1]
+  s2_sp_b   <- priors[["s2_sp_IG"]][2]
+  phi.a  <- priors[["phi.Unif"]][1]
+  phi.b  <- priors[["phi.Unif"]][2]
+  s2_tm_a   <- priors[["s2_tm_IG"]][1]
+  s2_tm_b   <- priors[["s2_tm_IG"]][2]
   phi.a  <- priors[["phi.Unif"]][1]
   phi.b  <- priors[["phi.Unif"]][2]
 
@@ -250,11 +254,11 @@ stglmm <- function(fixed,
       sigma2_sp_proposal <- rnorm(1, current_sigma2_sp, sd = exp(sTunings[sigma2_sp_index]))
       if (sigma2_sp_proposal > 0) {
         sigma2_sp_current_likelihood <- sigma2_log_full_conditional(sigma2 = current_sigma2_sp, twKinvw = twKinvw,
-                                                                 s2.a = s2.a, s2.b = s2.b,
+                                                                 s2_a = s2_sp_a, s2_b = s2_sp_b,
                                                                  rank = rank)
 
         sigma2_sp_proposal_likelihood <-  sigma2_log_full_conditional(sigma2 = sigma2_sp_proposal, twKinvw = twKinvw,
-                                                                   s2.a = s2.a, s2.b = s2.b,
+                                                                   s2_a = s2_sp_a, s2_b = s2_sp_b,
                                                                    rank = rank)
         sigma2_sp_lr <- sigma2_sp_proposal_likelihood - sigma2_sp_current_likelihood
       } else {
@@ -434,11 +438,11 @@ phi_sp_log_full_conditional <- function(phi, dist_space, xbeta, current_delta, U
   )
   return(list(likelihood = likelihood, d = d, twKinvw = foo2, U = U, u = u))
 }
-# (-s2.a - 1 - rank/2)*log(current_sigma2_sp) - (s2.b + 0.5*twKinvw)/current_sigma2_sp
+# (-s2_a - 1 - rank/2)*log(current_sigma2_sp) - (s2_b + 0.5*twKinvw)/current_sigma2_sp
 sigma2_log_full_conditional <- function(sigma2, twKinvw,
-                                        s2.a, s2.b,
+                                        s2_a, s2_b,
                                         rank) {
-  (-s2.a - 1 - rank/2)*log(sigma2) - (s2.b + 0.5*twKinvw)/sigma2
+  (-s2_a - 1 - rank/2)*log(sigma2) - (s2_b + 0.5*twKinvw)/sigma2
 }
 
 alpha_log_full_conditional <- function(alpha, xbeta,  U, d,

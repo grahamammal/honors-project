@@ -61,8 +61,8 @@ rrp_glm <- function(fixed,
   # Define prior parameters
   #######################################
   beta.b <- priors[["beta.normal"]]
-  s2.a   <- priors[["s2.IG"]][1]
-  s2.b   <- priors[["s2.IG"]][2]
+  s2_a   <- priors[["s2.IG"]][1]
+  s2_b   <- priors[["s2.IG"]][2]
   phi.a  <- priors[["phi.Unif"]][1]
   phi.b  <- priors[["phi.Unif"]][2]
 
@@ -250,11 +250,11 @@ rrp_glm <- function(fixed,
       sigma2_proposal <- rnorm(1, current_sigma2, sd = exp(sTunings[sigma2_index]))
       if (sigma2_proposal > 0) {
         sigma2_current_likelihood <- sigma2_log_full_conditional(sigma2 = current_sigma2, twKinvw = twKinvw,
-                                                s2.a = s2.a, s2.b = s2.b,
+                                                s2_a = s2_a, s2_b = s2_b,
                                                 rank = rank)
 
         sigma2_proposal_likelihood <-  sigma2_log_full_conditional(sigma2 = sigma2_proposal, twKinvw = twKinvw,
-                                                  s2.a = s2.a, s2.b = s2.b,
+                                                  s2_a = s2_a, s2_b = s2_b,
                                                   rank = rank)
         sigma2_lr <- sigma2_proposal_likelihood - sigma2_current_likelihood
       } else {
@@ -425,11 +425,11 @@ phi_log_full_conditional <- function(phi, distances, xbeta, current_delta, U1, P
   )
   return(list(likelihood = likelihood, d = d, twKinvw = foo2, U = U, u = u))
 }
-# (-s2.a - 1 - rank/2)*log(current_sigma2) - (s2.b + 0.5*twKinvw)/current_sigma2
+# (-s2_a - 1 - rank/2)*log(current_sigma2) - (s2_b + 0.5*twKinvw)/current_sigma2
 sigma2_log_full_conditional <- function(sigma2, twKinvw,
-                                        s2.a, s2.b,
+                                        s2_a, s2_b,
                                         rank) {
-  (-s2.a - 1 - rank/2)*log(sigma2) - (s2.b + 0.5*twKinvw)/sigma2
+  (-s2_a - 1 - rank/2)*log(sigma2) - (s2_b + 0.5*twKinvw)/sigma2
 }
 
 

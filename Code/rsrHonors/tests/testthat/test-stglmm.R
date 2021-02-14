@@ -71,7 +71,8 @@ test_that("test poisson stglmm runs", {
                        "s2" = 2,
                        "phi" = 0.5),
     priors = list("beta.normal" = 100, # variance of beta prior
-                  "s2.IG" = c(2,2), # inverse gamma params
+                  "s2_sp_IG" = c(2,2), # inverse gamma params
+                  "s2_tm_IG" = c(2,2),
                   "phi.Unif" = c(0.01, 1.5)), # uniform prior on phi
     tuning = list("beta" = runif(4, 0.005, 0.01),
                   "s2" = 0.1,
@@ -100,7 +101,8 @@ test_that("test linear stglmm runs", {
                        "s2" = 2,
                        "phi" = 0.5),
     priors = list("beta.normal" = 100, # variance of beta prior
-                  "s2.IG" = c(2,2), # inverse gamma params
+                  "s2_sp_IG" = c(2,2), # inverse gamma params
+                  "s2_tm_IG" = c(2,2),
                   "phi.Unif" = c(0.01, 1)), # uniform prior on phi
     tuning = list("beta" = rnorm(4, 1, 0.2),
                   "s2" = 0.1,
@@ -128,7 +130,8 @@ test_that("test logistic stglmm runs", {
                        "s2" = 2,
                        "phi" = 0.5),
     priors = list("beta.normal" = c(100), # variance of beta prior
-                  "s2.IG" = c(2,2), # inverse gamma params
+                  "s2_sp_IG" = c(2,2), # inverse gamma params
+                  "s2_tm_IG" = c(2,2),
                   "phi.Unif" = c(0.01, 1.5)), # uniform prior on phi
     tuning = list("beta" = runif(4, 0.05, 0.015),
                   "s2" = 0.1,
