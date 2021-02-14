@@ -218,7 +218,7 @@ test_that("phi full conditional correct", {
 
 
   expect_snapshot_value(phi_log_full_conditional(phi = 0.2,
-                            coords = cbind(x1, x2),
+                            distances = h,
                             O = y_pois,
                             n = n,
                             rk = 10,

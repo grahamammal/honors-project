@@ -152,7 +152,8 @@ stglmm <- function(fixed,
       n_s, # number if interations (iter)
       as.integer(rk), # rank times mul (what is mul?)
       nu, #nu as before
-      as.integer(cores)# number of cores
+      as.integer(cores),# number of cores
+      cov_fun = 0
     ) # C++ function for approximating eigenvectors
     est_time  <- Sys.time() - est_start # calculates how long one random projection takes
     message("Estimated time (hrs):",round((chains - k + 1)*iter*2*est_time/3600, 3) ,"\n") # prints out estimate time in hours

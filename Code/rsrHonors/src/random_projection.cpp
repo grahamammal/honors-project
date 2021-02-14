@@ -7,17 +7,16 @@ using namespace Rcpp;
 
 
 // calcualte matern 2.5
-arma::mat makeCov1(arma::mat coords, double phi, int n, int num){
+arma::mat make_matern_25(arma::mat dist, double phi, int n, int num){
   double oneoverphi = sqrt(5)/phi;
   int i,j;
-  double dist;
   arma::mat C = arma::mat(n, n);
-
+  double cur_dist;
 
   for(i = 0; i < n; i++){
     for(j = i; j < n; j++){
-      dist = sqrt(pow(coords(i,0)-coords(j,0),2) + pow(coords(i,1)-coords(j,1),2));
-      C(i,j) = C(j,i) = (1.0+ oneoverphi*dist + 1.0/3.0*pow(oneoverphi,2)*pow(dist,2))*exp(-1*oneoverphi*dist);
+      cur_dist = dist(i,j);
+      C(i,j) = C(j,i) = (1.0+ oneoverphi*cur_dist + 1.0/3.0*pow(oneoverphi,2)*pow(cur_dist,2))*exp(-1*oneoverphi*cur_dist);
     }
   }
 
@@ -30,12 +29,12 @@ arma::mat makeCov1(arma::mat coords, double phi, int n, int num){
 //' @export
 // [[Rcpp::export]]
 List rp(double phi_r, // phi_starting
-        arma::mat coords, //x,y coords of obs
+        arma::mat dist, //x,y coords of obs
         int n_r, // batchlength
         int r_r, // rank*mul, not sure what mul is, rank is number of svd vectors.
         double nu_r, // nu
-        int num_r // number of cores
-          ){
+        int num_r, // number of cores
+        int cov_fun  ){
 
 
   int i,j,k;
@@ -60,11 +59,11 @@ List rp(double phi_r, // phi_starting
 
 
   // Make function to make K
-  if(nu==2.5) covfn = makeCov1;// matern
+  if(cov_fun == 0) covfn = make_matern_25;// matern
 
 
   // Make K (Covariance matrix of Coords)
-  K = covfn(coords ,  phi , n , num); // K is the covariance matrix
+  K = covfn(dist ,  phi , n , num); // K is the covariance matrix
 
   // Build Omega (random projection matrix
   for(i = 0; i < n; i++){

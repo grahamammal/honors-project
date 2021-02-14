@@ -5,8 +5,8 @@
 #'
 #' @param x A single integer.
 #' @export
-rp <- function(phi_r, coords, n_r, r_r, nu_r, num_r) {
-    .Call('_rsrHonors_rp', PACKAGE = 'rsrHonors', phi_r, coords, n_r, r_r, nu_r, num_r)
+rp <- function(phi_r, dist, n_r, r_r, nu_r, num_r, cov_fun) {
+    .Call('_rsrHonors_rp', PACKAGE = 'rsrHonors', phi_r, dist, n_r, r_r, nu_r, num_r, cov_fun)
 }
 
 #' Matrix Multiplication

@@ -64,7 +64,7 @@ poi_gp_arrpfit <- function(O=obs,
   }
 
   phi.lf <- function(phi){
-    K1 = rp(phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(core)) # C++ function for approximating eigenvectors
+    K1 = rp(phi,as.matrix(dist(coords)),as.integer(n) ,as.integer(rk),nu,as.integer(core), cov_fun = 0) # C++ function for approximating eigenvectors
     K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
     d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
 
@@ -128,12 +128,12 @@ poi_gp_arrpfit <- function(O=obs,
   # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm.
   K = rp(
             sParams[phiindx], # single number, phi in starting param list
-            coords, #literally x,y coords of obs
+            as.matrix(dist(coords)), #literally x,y coords of obs
             as.integer(n), # number if interations (batchlength)
             as.integer(rk), # rank times mul (what is mul?)
             nu, #nu as before
-            as.integer(core)# number of cores
-            ) # C++ function for approximating eigenvectors
+            as.integer(core),# number of cores
+            cov_fun = 0) # C++ function for approximating eigenvectors
   est.time  <- proc.time() - est.time # calculates how long one random projection takes
   cat("Estimated time (hrs):",niter*2*est.time[3]/3600 ,"\n") # prints out estimate time in hours
 

@@ -38,7 +38,7 @@ rrp_glm <- function(fixed,
 
   # Spatial effect
   coords <- as.matrix(lm(spatial, data = data, method = "model.frame"))
-
+  distances <- as.matrix(dist(coords))
   # TODO: change this to param_start, then figure out how to get rid of it
 
   starting <- param_start
@@ -147,12 +147,12 @@ rrp_glm <- function(fixed,
     # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm.
     K = rp(
               current_phi, # single number, phi in starting param list
-              coords, #literally x,y coords of obs
+              distances, #literally x,y coords of obs
               as.integer(n), # number if interations (iter)
               as.integer(rk), # rank times mul (what is mul?)
               nu, #nu as before
-              as.integer(cores)# number of cores
-              ) # C++ function for approximating eigenvectors
+              as.integer(cores),# number of cores
+              0) # C++ function for approximating eigenvectors
     est_time  <- Sys.time() - est_start # calculates how long one random projection takes
     message("Estimated time (hrs):",round((chains - k + 1)*iter*2*est_time/3600, 3) ,"\n") # prints out estimate time in hours
 
@@ -212,7 +212,7 @@ rrp_glm <- function(fixed,
 
       # propose from normal
       phi_proposal <-  rnorm(1, current_phi, sd = exp(sTunings[phi_index]))
-      phi_proposal_likelihood <- phi_current_likelihood <- phi_log_full_conditional(current_phi, coords = coords, xbeta = xbeta, current_delta = current_delta, U1 = U1, PPERP = PPERP, # data and params
+      phi_proposal_likelihood <- phi_current_likelihood <- phi_log_full_conditional(current_phi, distances = distances, xbeta = xbeta, current_delta = current_delta, U1 = U1, PPERP = PPERP, # data and params
                                                                                     O = O, # observations
                                                                                     current_sigma2 = current_sigma2, # priors
                                                                                     nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
@@ -222,7 +222,7 @@ rrp_glm <- function(fixed,
 
       # checks if guess in bounds of Unif(a, b) prior
       if (phi_proposal < phi.b & phi_proposal > phi.a) {
-        phi_proposal_likelihood <- phi_log_full_conditional(phi_proposal, coords = coords, xbeta = xbeta, current_delta = current_delta, U1 = U1, PPERP = PPERP, # data and params
+        phi_proposal_likelihood <- phi_log_full_conditional(phi_proposal, distances = distances, xbeta = xbeta, current_delta = current_delta, U1 = U1, PPERP = PPERP, # data and params
                                                O = O, # observations
                                                current_sigma2 = current_sigma2, # priors
                                                nu = nu, n = n, rk = rk, cores = cores, rank = rank, # control params
@@ -401,12 +401,12 @@ delta_log_full_conditional <- function(delta, xbeta,  U, d,
     return(list(lr = lf, twKinvw = foo2, w = w))
 }
 
-phi_log_full_conditional <- function(phi, coords, xbeta, current_delta, U1, PPERP, # data and params
+phi_log_full_conditional <- function(phi, distances, xbeta, current_delta, U1, PPERP, # data and params
                                      O, # observations
                                      current_sigma2, # priors
                                      nu, n, rk, cores, rank, # control params
                                      dens_fun_log){ # density function
-  K1 = rp(phi,coords,as.integer(n) ,as.integer(rk),nu,as.integer(cores)) # C++ function for approximating eigenvectors
+  K1 = rp(phi,distances,as.integer(n) ,as.integer(rk),nu,as.integer(cores), 0) # C++ function for approximating eigenvectors
   K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
   d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
 

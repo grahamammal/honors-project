@@ -2,11 +2,12 @@
 
 test_that("rp returns list", {
   expect_type(rp(phi_r = 0.2,
-                 coords = cbind(rnorm(100), rnorm(100)),
+                 dist = as.matrix(dist(cbind(rnorm(100), rnorm(100)))),
                  n_r = 100,
                  r_r = 50,
                  nu_r = 2.5,
-                 num_r = 1), "list")
+                 num_r = 1,
+                 cov_fun = 0), "list")
 })
 
 test_that("rp close to actual values", {
@@ -17,11 +18,12 @@ test_that("rp close to actual values", {
   nu = 2.5
 
   rp_out = rp(phi_r = phi,
-              coords = coords,
+              dist = as.matrix(dist(coords)),
               n_r = n,
               r_r = r,
               nu_r = nu,
-              num_r = 1)
+              num_r = 1,
+              cov_fun = 0)
 
   h <- as.matrix(dist(coords))
 

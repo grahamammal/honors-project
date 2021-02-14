@@ -7,18 +7,19 @@
 using namespace Rcpp;
 
 // rp
-List rp(double phi_r, arma::mat coords, int n_r, int r_r, double nu_r, int num_r);
-RcppExport SEXP _rsrHonors_rp(SEXP phi_rSEXP, SEXP coordsSEXP, SEXP n_rSEXP, SEXP r_rSEXP, SEXP nu_rSEXP, SEXP num_rSEXP) {
+List rp(double phi_r, arma::mat dist, int n_r, int r_r, double nu_r, int num_r, int cov_fun);
+RcppExport SEXP _rsrHonors_rp(SEXP phi_rSEXP, SEXP distSEXP, SEXP n_rSEXP, SEXP r_rSEXP, SEXP nu_rSEXP, SEXP num_rSEXP, SEXP cov_funSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< double >::type phi_r(phi_rSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type coords(coordsSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type dist(distSEXP);
     Rcpp::traits::input_parameter< int >::type n_r(n_rSEXP);
     Rcpp::traits::input_parameter< int >::type r_r(r_rSEXP);
     Rcpp::traits::input_parameter< double >::type nu_r(nu_rSEXP);
     Rcpp::traits::input_parameter< int >::type num_r(num_rSEXP);
-    rcpp_result_gen = Rcpp::wrap(rp(phi_r, coords, n_r, r_r, nu_r, num_r));
+    Rcpp::traits::input_parameter< int >::type cov_fun(cov_funSEXP);
+    rcpp_result_gen = Rcpp::wrap(rp(phi_r, dist, n_r, r_r, nu_r, num_r, cov_fun));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -41,7 +42,7 @@ END_RCPP
 RcppExport SEXP run_testthat_tests();
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_rsrHonors_rp", (DL_FUNC) &_rsrHonors_rp, 6},
+    {"_rsrHonors_rp", (DL_FUNC) &_rsrHonors_rp, 7},
     {"_rsrHonors_mmC", (DL_FUNC) &_rsrHonors_mmC, 5},
     {"run_testthat_tests", (DL_FUNC) &run_testthat_tests, 0},
     {NULL, NULL, 0}
