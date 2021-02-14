@@ -41,6 +41,8 @@ stglmm <- function(fixed,
   }
 
 
+  dist_space <- as.matrix(dist(locations))
+
   # TODO: change this to param_start, then figure out how to get rid of it
 
   starting <- param_start
@@ -148,8 +150,8 @@ stglmm <- function(fixed,
     # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm.
     K = rp(
       current_phi, # single number, phi in starting param list
-      locations, #literally x,y locations of obs
-      n_s, # number if interations (iter)
+      dist_space, #literally x,y locations of obs
+      n_s, # number of points
       as.integer(rk), # rank times mul (what is mul?)
       nu, #nu as before
       as.integer(cores),# number of cores
@@ -210,7 +212,7 @@ stglmm <- function(fixed,
 
       # propose from normal
       phi_proposal <-  rnorm(1, current_phi, sd = exp(sTunings[phi_index]))
-      phi_proposal_likelihood <- phi_current_likelihood <- phi_sp_log_full_conditional(current_phi, locations = locations, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
+      phi_proposal_likelihood <- phi_current_likelihood <- phi_sp_log_full_conditional(current_phi, dist_space = dist_space, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
                                                                                     O = O, # observations
                                                                                     current_sigma2 = current_sigma2, # priors
                                                                                     nu = nu, n_s = n_s, n_t = n_t, rk = rk, cores = cores, rank = rank, # control params
@@ -220,7 +222,7 @@ stglmm <- function(fixed,
 
       # checks if guess in bounds of Unif(a, b) prior
       if (phi_proposal < phi.b & phi_proposal > phi.a) {
-        phi_proposal_likelihood <- phi_sp_log_full_conditional(phi_proposal, locations = locations, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
+        phi_proposal_likelihood <- phi_sp_log_full_conditional(phi_proposal, dist_space = dist_space, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
                                                             O = O, # observations
                                                             current_sigma2 = current_sigma2, # priors
                                                             nu = nu, n_s = n_s, n_t = n_t, rk = rk, cores = cores, rank = rank, # control params
@@ -401,17 +403,18 @@ delta_log_full_conditional_st <- function(delta, xbeta,  U, d,
   return(list(lr = lf, twKinvw = foo2, w = w))
 }
 
-phi_sp_log_full_conditional <- function(phi, locations, xbeta, current_delta, U1, # data and params
+phi_sp_log_full_conditional <- function(phi, dist_space, xbeta, current_delta, U1, # data and params
                                      O, # observations
                                      current_sigma2, # priors
                                      nu, n_s, n_t, rk, cores, rank, # control params
                                      dens_fun_log){ # density function
   K1 = rp(phi,
-          locations,
+          dist_space,
           n_s,
           as.integer(rk),
           nu,
-          as.integer(cores)) # C++ function for approximating eigenvectors
+          as.integer(cores),
+          cov_fun = 0) # C++ function for approximating eigenvectors
 
   K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
   d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
@@ -438,25 +441,25 @@ sigma2_sp_log_full_conditional <- function(sigma2, twKinvw,
   (-s2.a - 1 - rank/2)*log(sigma2) - (s2.b + 0.5*twKinvw)/sigma2
 }
 
-alpha_log_full_conditional <- function(delta, xbeta,  U, d,
+alpha_log_full_conditional <- function(alpha, xbeta,  U, d,
                                        O,
                                        n_s,
                                        current_sigma2,
                                        dens_fun_log){ # delta is rank-m
-  v = U %*% (sqrt(d)*delta)
+  v = U %*% (sqrt(d)*alpha)
   z <- xbeta + rep(v, each = n_s)
-  foo2 <- crossprod(delta,delta) # d = D^2 from random projection
+  foo2 <- crossprod(alpha,alpha) # d = D^2 from random projection
   lf <- sum(dens_fun_log(O, mean = z)) - 1/(2*current_sigma2) * foo2
   return(list(lr = lf, twKinvw = foo2, v = v))
 }
 
-phi_tm_log_full_conditional <- function(phi, times, xbeta, current_delta, U1, # data and params
+phi_tm_log_full_conditional <- function(phi, dist_time, xbeta, current_delta, U1, # data and params
                                         O, # observations
                                         current_sigma2, # priors
                                         nu, n_s, n_t, rk, cores, rank, # control params
                                         dens_fun_log){ # density function
 
-  K1 = rp(phi, times, n_t, as.integer(rk), nu,as.integer(cores)) # C++ function for approximating eigenvectors
+  K1 = rp(phi, dist_time, n_t, as.integer(rk), nu,as.integer(cores), cov_fun = 1) # C++ function for approximating eigenvectors
   K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
   d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
 

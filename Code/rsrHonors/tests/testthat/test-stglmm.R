@@ -183,7 +183,7 @@ test_that("stglmm phi_sp full conditional correct", {
 
 
   expect_snapshot_value(phi_sp_log_full_conditional(phi = 0.2,
-                                                    locations = as.matrix(locations),
+                                                    dist_space = as.matrix(dist(locations)),
                                                  O = y_pois,
                                                  n_s = n_s,
                                                  n_t = n_t,
@@ -206,7 +206,7 @@ test_that("stglmm alpha full conditional correct", {
   U <- cov_eigen$vectors[,1:10]
   d <- cov_eigen$values[1:10] ^ 2
 
-  expect_snapshot_value(alpha_log_full_conditional(delta = -4:5/10,
+  expect_snapshot_value(alpha_log_full_conditional(alpha = -4:5/10,
                                                    O = y_pois,
                                                    U = U,
                                                    d = d,
@@ -225,7 +225,7 @@ test_that("stglmm phi_tm full conditional correct", {
   d <- cov_eigen$values[1:10] ^ 2
 
   expect_snapshot_value(phi_tm_log_full_conditional(phi = 0.2,
-                                                    times = time,
+                                                    dist_time = as.matrix(dist(time)),
                                                     O = y_pois,
                                                     n_s = n_s,
                                                     n_t = n_t,
