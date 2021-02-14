@@ -67,12 +67,12 @@ stglmm <- function(fixed,
   beta.b <- priors[["beta.normal"]]
   s2_sp_a   <- priors[["s2_sp_IG"]][1]
   s2_sp_b   <- priors[["s2_sp_IG"]][2]
-  phi.a  <- priors[["phi.Unif"]][1]
-  phi.b  <- priors[["phi.Unif"]][2]
+  phi_sp_a  <- priors[["phi_sp_unif"]][1]
+  phi_sp_b  <- priors[["phi_sp_unif"]][2]
   s2_tm_a   <- priors[["s2_tm_IG"]][1]
   s2_tm_b   <- priors[["s2_tm_IG"]][2]
-  phi.a  <- priors[["phi.Unif"]][1]
-  phi.b  <- priors[["phi.Unif"]][2]
+  phi_tm_a  <- priors[["phi_tm_unif"]][1]
+  phi_tm_b  <- priors[["phi_tm_unif"]][2]
 
 
   ###################################
@@ -146,7 +146,7 @@ stglmm <- function(fixed,
 
     current_beta <- runif(p, min = -2, max = 2)
     current_sigma2_sp <- exp(runif(1, min = -2, max = 2))
-    current_phi <- phi.a + (phi.b - phi.a)/(1 + exp(-runif(1, min = -2, max = 2)))
+    current_phi <- phi_sp_a + (phi_sp_b - phi_sp_a)/(1 + exp(-runif(1, min = -2, max = 2)))
 
 
 
@@ -225,7 +225,7 @@ stglmm <- function(fixed,
 
 
       # checks if guess in bounds of Unif(a, b) prior
-      if (phi_proposal < phi.b & phi_proposal > phi.a) {
+      if (phi_proposal < phi_sp_b & phi_proposal > phi_sp_a) {
         phi_proposal_likelihood <- phi_sp_log_full_conditional(phi_proposal, dist_space = dist_space, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
                                                             O = O, # observations
                                                             current_sigma2_sp = current_sigma2_sp, # priors
@@ -434,7 +434,7 @@ phi_sp_log_full_conditional <- function(phi, dist_space, xbeta, current_delta, U
   foo2 <- crossprod(current_delta, current_delta)
   likelihood <- (
     sum(dens_fun_log(O, mean = z)) - 0.5*1/current_sigma2_sp * foo2 # likelihood
-    # + log(phi - phi.a) + log(phi.b - phi) # jacobian
+    # + log(phi - phi_sp_a) + log(phi_sp_b - phi) # jacobian
   )
   return(list(likelihood = likelihood, d = d, twKinvw = foo2, U = U, u = u))
 }
@@ -478,7 +478,7 @@ phi_tm_log_full_conditional <- function(phi, dist_time, xbeta, current_delta, U1
   foo2 <- crossprod(current_delta, current_delta)
   likelihood <- (
     sum(dens_fun_log(O, mean = z)) - 0.5*1/current_sigma2_tm * foo2 # likelihood
-    # + log(phi - phi.a) + log(phi.b - phi) # jacobian
+    # + log(phi - phi_tm_a) + log(phi_tm_b - phi) # jacobian
   )
   return(list(likelihood = likelihood, d = d, twKinvw = foo2, U = U, u = u))
 }
