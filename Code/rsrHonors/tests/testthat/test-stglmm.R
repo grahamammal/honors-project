@@ -82,6 +82,7 @@ test_that("test poisson stglmm runs", {
     mul = 2)
 
   expect_type(poisson_model, "list")
+  expect_snapshot(poisson_model$p.params)
 })
 
 test_that("test linear stglmm runs", {

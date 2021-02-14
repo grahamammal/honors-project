@@ -23,6 +23,22 @@ arma::mat make_matern_25(arma::mat dist, double phi, int n, int num){
   return(C);
 }
 
+arma::mat make_sq_exp(arma::mat dist, double phi, int n, int num){
+  int i,j;
+  arma::mat C = arma::mat(n, n);
+  double cur_dist;
+
+  for(i = 0; i < n; i++){
+    for(j = i; j < n; j++){
+      cur_dist = dist(i,j);
+      C(i,j) = C(j,i) = exp(-pow(cur_dist/phi, 2));
+
+    }
+  }
+
+  return(C);
+}
+
 //' Multiply a number by two
 //'
 //' @param x A single integer.
@@ -59,7 +75,12 @@ List rp(double phi_r, // phi_starting
 
 
   // Make function to make K
-  if(cov_fun == 0) covfn = make_matern_25;// matern
+  if(cov_fun == 0) {
+    covfn = make_matern_25;// matern
+  } else if (cov_fun == 1) {
+    covfn = make_sq_exp;
+  }
+
 
 
   // Make K (Covariance matrix of Coords)
