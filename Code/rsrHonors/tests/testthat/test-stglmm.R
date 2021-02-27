@@ -81,8 +81,7 @@ test_that("test poisson stglmm runs", {
                   "w" = 0.1),
     nu = nu,
     rank_sp = 10,
-    rank_tm = 10,
-    mul = 2)
+    rank_tm = 10)
 
   expect_type(poisson_model, "list")
   expect_snapshot(poisson_model$p.params)
@@ -113,8 +112,7 @@ test_that("test linear stglmm runs", {
                   "w" = 0.1),
     nu = nu,
     rank_sp = 10,
-    rank_tm = 10,
-    mul = 2)
+    rank_tm = 10)
 
   expect_type(linear_model, "list")
 })
@@ -144,8 +142,7 @@ test_that("test logistic stglmm runs", {
                   "w" = 0.1),
     nu = nu,
     rank_sp = 10,
-    rank_tm = 10,
-    mul = 2), "list")
+    rank_tm = 10), "list")
 })
 
 test_that("stglmm beta full conditional correct", {
@@ -179,7 +176,7 @@ test_that("stglmm delta full conditional correct", {
                                                    d = d,
                                                    n_t = n_t,
                                                    xbeta = X %*% beta,
-                                                   current_sigma2 = 1,
+                                                   current_sigma2_sp = 1,
                                                    dens_fun_log = dens_fun_log), style = "serialize")
 })
 
@@ -199,7 +196,6 @@ test_that("stglmm phi_sp full conditional correct", {
                                                  O = y_pois,
                                                  n_s = n_s,
                                                  n_t = n_t,
-                                                 rk = 10,
                                                  nu = nu,
                                                  cores = 1,
                                                  dens_fun_log = dens_fun_log,
@@ -207,14 +203,14 @@ test_that("stglmm phi_sp full conditional correct", {
                                                  rank = 10,
                                                  xbeta = X %*% beta,
                                                  current_delta = -4:5/10,
-                                                 current_sigma2 = 1), style = "serialize")})
+                                                 current_sigma2_sp = 1), style = "serialize")})
 
 
 test_that("stglmm alpha full conditional correct", {
   set.seed(451)
   dens_fun_log <- function(x, mean) {dpois(x, lambda = poisson()$linkinv(mean), log = TRUE)}
 
-  cov_eigen <- eigen(matern_covariance)
+  cov_eigen <- eigen(exp_cov)
 
   U <- cov_eigen$vectors[,1:10]
   d <- cov_eigen$values[1:10] ^ 2
@@ -223,8 +219,9 @@ test_that("stglmm alpha full conditional correct", {
                                                    O = y_pois,
                                                    U = U,
                                                    d = d,
+                                                   n_s = 100,
                                                    xbeta = X %*% beta,
-                                                   current_sigma2 = 1,
+                                                   current_sigma2_tm = 1,
                                                    dens_fun_log = dens_fun_log), style = "serialize")
 })
 
@@ -243,12 +240,11 @@ test_that("stglmm phi_tm full conditional correct", {
                                                     O = y_pois,
                                                     n_s = n_s,
                                                     n_t = n_t,
-                                                    rk = 10,
+                                                    rank = 10,
                                                     nu = nu,
                                                     cores = 1,
                                                     dens_fun_log = dens_fun_log,
                                                     U1 = U,
-                                                    rank = 10,
                                                     xbeta = X %*% beta,
-                                                    current_delta = -4:5/10,
-                                                    current_sigma2 = 1), style = "serialize")})
+                                                    current_alpha = -4:5/10,
+                                                    current_sigma2_tm = 1), style = "serialize")})

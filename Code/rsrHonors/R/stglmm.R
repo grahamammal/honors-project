@@ -12,8 +12,7 @@ stglmm <- function(fixed,
                    tuning,
                    nu, # keep 2.5 for now
                    rank_sp,
-                   rank_tm,
-                   mul = 2){ # rank to reduce spatial matrix to
+                   rank_tm){ # rank to reduce spatial matrix to
 
   start_time <- Sys.time()
   # Figure out how to interpret the formula fixed fixed
@@ -50,7 +49,6 @@ stglmm <- function(fixed,
   ptm <- proc.time() # starting time
   p = ncol(X) # expected rank of X
   n <- length(O) # number of observations
-  rk = rank*mul # rank of approximation matrix
   AP = chol2inv(chol(crossprod(X,X))) %*% t(X) # projection onto column space of X
   n_s <- nrow(locations)
   n_t <- length(time)
@@ -76,7 +74,6 @@ stglmm <- function(fixed,
   phi_tm_b  <- priors[["phi_tm_unif"]][2]
 
 
-
   ###################################
   # Orig: define index for parameters
   # Must mean that parameters are stored in a single vector
@@ -98,12 +95,12 @@ stglmm <- function(fixed,
   # Orig: initialize some matrix for storage
   # Prepares matrices to hold estimates of parameters
   #########################################
-  samples_eta <- matrix(NA,ncol = rank,nrow = niter) # store the r.e samples
+  samples_eta <- matrix(NA,ncol = rank_sp, nrow = niter) # store the r.e samples
   samples_s <- matrix(NA,ncol = nParams,nrow = niter) # store the parameter samples
   samples_w <- matrix(NA,ncol = n,nrow = niter) # store the r.e samples
   sTunings <- sParams <- matrix(NA,nrow = nParams) # update the current parameters for each iteration
 
-
+message("HAHAHAHAA")
   samples <- array(dim = c(iter, chains, max(v_index)),
                    dimnames = list("Iteration" = 1:iter,
                                    "Chain" = 1:chains,
@@ -171,7 +168,7 @@ stglmm <- function(fixed,
       current_phi, # single number, phi in starting param list
       dist_space, #literally x,y locations of obs
       n_s, # number of points
-      as.integer(rk), # rank times mul (what is mul?)
+      rank_sp,
       nu, #nu as before
       as.integer(cores),# number of cores
       cov_fun = 0
@@ -234,7 +231,7 @@ stglmm <- function(fixed,
       phi_proposal_likelihood <- phi_current_likelihood <- phi_sp_log_full_conditional(current_phi, dist_space = dist_space, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
                                                                                     O = O, # observations
                                                                                     current_sigma2_sp = current_sigma2_sp, # priors
-                                                                                    nu = nu, n_s = n_s, n_t = n_t, rk = rk, cores = cores, rank = rank_sp, # control params
+                                                                                    nu = nu, n_s = n_s, n_t = n_t, rank = rank_sp, cores = cores, rank = rank_sp, # control params
                                                                                     dens_fun_log = dens_fun_log)
 
 
@@ -244,7 +241,7 @@ stglmm <- function(fixed,
         phi_proposal_likelihood <- phi_sp_log_full_conditional(phi_proposal, dist_space = dist_space, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
                                                             O = O, # observations
                                                             current_sigma2_sp = current_sigma2_sp, # priors
-                                                            nu = nu, n_s = n_s, n_t = n_t, rk = rk, cores = cores, rank = rank_sp, # control params
+                                                            nu = nu, n_s = n_s, n_t = n_t, rank = rank_sp, cores = cores, rank = rank_sp, # control params
                                                             dens_fun_log = dens_fun_log)
       } else {
         phi_proposal_likelihood$likelihood <- -Inf
@@ -427,12 +424,12 @@ delta_log_full_conditional_st <- function(delta, xbeta,  U, d,
 phi_sp_log_full_conditional <- function(phi, dist_space, xbeta, current_delta, U1, # data and params
                                      O, # observations
                                      current_sigma2_sp, # priors
-                                     nu, n_s, n_t, rk, cores, rank, # control params
+                                     nu, n_s, n_t, cores, rank, # control params
                                      dens_fun_log){ # density function
   K1 = rp(phi,
           dist_space,
           n_s,
-          as.integer(rk),
+          rank,
           nu,
           as.integer(cores),
           cov_fun = 0) # C++ function for approximating eigenvectors
@@ -467,20 +464,23 @@ alpha_log_full_conditional <- function(alpha, xbeta,  U, d,
                                        n_s,
                                        current_sigma2_tm,
                                        dens_fun_log){ # delta is rank-m
+
+
   v = U %*% (sqrt(d)*alpha)
+
   z <- xbeta + rep(v, each = n_s)
-  foo2 <- crossprod(alpha,alpha) # d = D^2 from random projection
+  foo2 <- crossprod(alpha, alpha) # d = D^2 from random projection
   lf <- sum(dens_fun_log(O, mean = z)) - 1/(2*current_sigma2_tm) * foo2
   return(list(lr = lf, twKinvw = foo2, v = v))
 }
 
-phi_tm_log_full_conditional <- function(phi, dist_time, xbeta, current_delta, U1, # data and params
+phi_tm_log_full_conditional <- function(phi, dist_time, xbeta, current_alpha, U1, # data and params
                                         O, # observations
                                         current_sigma2_tm, # priors
-                                        nu, n_s, n_t, rk, cores, rank, # control params
+                                        nu, n_s, n_t, cores, rank, # control params
                                         dens_fun_log){ # density function
 
-  K1 = rp(phi, dist_time, n_t, as.integer(rk), nu,as.integer(cores), cov_fun = 1) # C++ function for approximating eigenvectors
+  K1 = rp(phi, dist_time, n_t, rank, nu, as.integer(cores), cov_fun = 1) # C++ function for approximating eigenvectors
   K.rp = list(d = K1[[1]],u = K1[[2]][,1:rank])
   d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
 
@@ -491,8 +491,8 @@ phi_tm_log_full_conditional <- function(phi, dist_time, xbeta, current_delta, U1
   u[,signdiag] = -u[,signdiag]
 
   U <- u # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
-  z <- xbeta + rep(U %*% (sqrt(d)*current_delta), each = n_s) # U is from random projection
-  foo2 <- crossprod(current_delta, current_delta)
+  z <- xbeta + rep(U %*% (sqrt(d)*current_alpha), each = n_s) # U is from random projection
+  foo2 <- crossprod(current_alpha, current_alpha)
   likelihood <- (
     sum(dens_fun_log(O, mean = z)) - 0.5*1/current_sigma2_tm * foo2 # likelihood
     # + log(phi - phi_tm_a) + log(phi_tm_b - phi) # jacobian
