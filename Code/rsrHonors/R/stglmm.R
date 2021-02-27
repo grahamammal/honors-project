@@ -79,7 +79,7 @@ stglmm <- function(fixed,
   # Must mean that parameters are stored in a single vector
   # This vector is called sParams
   ####################################
-  nParams <- p + 2;
+  nParams <- p + 4;
   beta_index <- 1:p;
   sigma2_sp_index <- max(beta_index) + 1;
   sigma2_tm_index <- sigma2_sp_index + 1;
@@ -96,11 +96,9 @@ stglmm <- function(fixed,
   # Prepares matrices to hold estimates of parameters
   #########################################
   samples_eta <- matrix(NA,ncol = rank_sp, nrow = niter) # store the r.e samples
-  samples_s <- matrix(NA,ncol = nParams,nrow = niter) # store the parameter samples
   samples_w <- matrix(NA,ncol = n,nrow = niter) # store the r.e samples
   sTunings <- sParams <- matrix(NA,nrow = nParams) # update the current parameters for each iteration
 
-message("HAHAHAHAA")
   samples <- array(dim = c(iter, chains, max(v_index)),
                    dimnames = list("Iteration" = 1:iter,
                                    "Chain" = 1:chains,
@@ -117,7 +115,9 @@ message("HAHAHAHAA")
 
   current_beta <- rep(NA_real_, p)
   current_sigma2_sp <- NA_real_
-  current_phi <- NA_real_
+  current_phi_sp <- NA_real_
+  current_sigma2_tm <- NA_real_
+  current_phi_tm <- NA_real_
   current_delta <- rep(NA_real_, rank_sp)
   current_w <- rep(NA_real_, n_s)
   current_alpha <- rep(NA_real_, rank_tm)
@@ -158,14 +158,14 @@ message("HAHAHAHAA")
 
     current_beta <- runif(p, min = -2, max = 2)
     current_sigma2_sp <- exp(runif(1, min = -2, max = 2))
-    current_phi <- phi_sp_a + (phi_sp_b - phi_sp_a)/(1 + exp(-runif(1, min = -2, max = 2)))
+    current_phi_sp <- phi_sp_a + (phi_sp_b - phi_sp_a)/(1 + exp(-runif(1, min = -2, max = 2)))
 
 
 
     est_start  <- Sys.time()
     # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm.
     K = rp(
-      current_phi, # single number, phi in starting param list
+      current_phi_sp, # single number, phi in starting param list
       dist_space, #literally x,y locations of obs
       n_s, # number of points
       rank_sp,
@@ -227,37 +227,37 @@ message("HAHAHAHAA")
       #########################################################
 
       # propose from normal
-      phi_proposal <-  rnorm(1, current_phi, sd = sTunings[phi_index])
-      phi_proposal_likelihood <- phi_current_likelihood <- phi_sp_log_full_conditional(current_phi, dist_space = dist_space, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
+      phi_sp_proposal <-  rnorm(1, current_phi_sp, sd = sTunings[phi_sp_index])
+      phi_sp_proposal_likelihood <- phi_sp_current_likelihood <- phi_sp_log_full_conditional(current_phi_sp, dist_space = dist_space, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
                                                                                     O = O, # observations
                                                                                     current_sigma2_sp = current_sigma2_sp, # priors
-                                                                                    nu = nu, n_s = n_s, n_t = n_t, rank = rank_sp, cores = cores, rank = rank_sp, # control params
+                                                                                    nu = nu, n_s = n_s, n_t = n_t, rank = rank_sp, cores = cores, # control params
                                                                                     dens_fun_log = dens_fun_log)
 
 
 
       # checks if guess in bounds of Unif(a, b) prior
-      if (phi_proposal < phi_sp_b & phi_proposal > phi_sp_a) {
-        phi_proposal_likelihood <- phi_sp_log_full_conditional(phi_proposal, dist_space = dist_space, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
+      if (phi_sp_proposal < phi_sp_b & phi_sp_proposal > phi_sp_a) {
+        phi_sp_proposal_likelihood <- phi_sp_log_full_conditional(phi_sp_proposal, dist_space = dist_space, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
                                                             O = O, # observations
                                                             current_sigma2_sp = current_sigma2_sp, # priors
-                                                            nu = nu, n_s = n_s, n_t = n_t, rank = rank_sp, cores = cores, rank = rank_sp, # control params
+                                                            nu = nu, n_s = n_s, n_t = n_t, rank = rank_sp, cores = cores, # control params
                                                             dens_fun_log = dens_fun_log)
       } else {
-        phi_proposal_likelihood$likelihood <- -Inf
+        phi_sp_proposal_likelihood$likelihood <- -Inf
       }
-      phi_lr <- phi_proposal_likelihood$likelihood - phi_current_likelihood$likelihood
+      phi_sp_lr <- phi_sp_proposal_likelihood$likelihood - phi_sp_current_likelihood$likelihood
 
-      if (log(runif(1)) < phi_lr) {
-        current_phi <- phi_proposal
-        sAccepts[phi_index] <- sAccepts[phi_index] + 1
-        phi_current_likelihood <- phi_proposal_likelihood
-        d <- phi_current_likelihood$d # approximated eigenvalues^2
-        U <- phi_current_likelihood$U # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
-        u <- phi_current_likelihood$u # approximated eigenvectors
+      if (log(runif(1)) < phi_sp_lr) {
+        current_phi_sp <- phi_sp_proposal
+        sAccepts[phi_sp_index] <- sAccepts[phi_sp_index] + 1
+        phi_sp_current_likelihood <- phi_sp_proposal_likelihood
+        d <- phi_sp_current_likelihood$d # approximated eigenvalues^2
+        U <- phi_sp_current_likelihood$U # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
+        u <- phi_sp_current_likelihood$u # approximated eigenvectors
       }
 
-      twKinvw <- phi_current_likelihood$twKinvw # current delta cross product for some reason
+      twKinvw <- phi_sp_current_likelihood$twKinvw # current delta cross product for some reason
 
       #########################################################
       # Block Update Sigma 2
@@ -287,7 +287,7 @@ message("HAHAHAHAA")
       }
 
       # update random effects using multivariate random walk with spherical normal proposal
-      delta_proposal <- rnorm(rank_sp, current_delta, sd = wTunings)
+      delta_proposal <- rnorm(rank_sp, current_delta, sd = deltaTunings)
 
       delta_proposal_likelihood <- delta_log_full_conditional_st(delta = delta_proposal, xbeta = xbeta,  U = U, d = d,
                                                               O = O,
@@ -309,7 +309,6 @@ message("HAHAHAHAA")
         current_w <- delta_current_likelihood$w
       }
 
-      samples_s[(k - 1)*iter + i,] <- c(current_beta, current_sigma2_sp, current_phi)
       samples_w[(k - 1)*iter + i,] <- current_w
       samples_eta[(k - 1)*iter + i,] <- current_delta
 
@@ -320,6 +319,7 @@ message("HAHAHAHAA")
       samples[i, k, v_index] <- current_v
     }
 
+
     output_progress(beta_draws = samples[, k, beta_index], sAccepts = sAccepts,
                     iter = iter, chain = k)
 
@@ -327,6 +327,8 @@ message("HAHAHAHAA")
     accept_w[k,] <- wAccepts/(iter)
 
   }
+
+
   accept_s <- apply(accept_s,2,mean)
   accept_w <- apply(accept_w,2,mean)
 
