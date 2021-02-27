@@ -80,7 +80,8 @@ test_that("test poisson stglmm runs", {
                   "phi" = 0.01,
                   "w" = 0.1),
     nu = nu,
-    rank = 10,
+    rank_sp = 10,
+    rank_tm = 10,
     mul = 2)
 
   expect_type(poisson_model, "list")
@@ -111,7 +112,8 @@ test_that("test linear stglmm runs", {
                   "phi" = 0.01,
                   "w" = 0.1),
     nu = nu,
-    rank = 10,
+    rank_sp = 10,
+    rank_tm = 10,
     mul = 2)
 
   expect_type(linear_model, "list")
@@ -141,12 +143,13 @@ test_that("test logistic stglmm runs", {
                   "phi" = 0.01,
                   "w" = 0.1),
     nu = nu,
-    rank = 10,
+    rank_sp = 10,
+    rank_tm = 10,
     mul = 2), "list")
 })
 
 test_that("stglmm beta full conditional correct", {
-
+  set.seed(451)
   dens_fun_log <- function(x, mean) {dpois(x, lambda = poisson()$linkinv(mean), log = TRUE)}
 
   expect_snapshot_value(beta_log_full_conditional_st(beta = beta,
@@ -162,6 +165,7 @@ test_that("stglmm beta full conditional correct", {
 
 
 test_that("stglmm delta full conditional correct", {
+  set.seed(451)
   dens_fun_log <- function(x, mean) {dpois(x, lambda = poisson()$linkinv(mean), log = TRUE)}
 
   cov_eigen <- eigen(matern_covariance)
@@ -181,6 +185,7 @@ test_that("stglmm delta full conditional correct", {
 
 
 test_that("stglmm phi_sp full conditional correct", {
+  set.seed(451)
   dens_fun_log <- function(x, mean) {dpois(x, lambda = poisson()$linkinv(mean), log = TRUE)}
 
   cov_eigen <- eigen(matern_covariance)
@@ -206,6 +211,7 @@ test_that("stglmm phi_sp full conditional correct", {
 
 
 test_that("stglmm alpha full conditional correct", {
+  set.seed(451)
   dens_fun_log <- function(x, mean) {dpois(x, lambda = poisson()$linkinv(mean), log = TRUE)}
 
   cov_eigen <- eigen(matern_covariance)
@@ -224,6 +230,7 @@ test_that("stglmm alpha full conditional correct", {
 
 
 test_that("stglmm phi_tm full conditional correct", {
+  set.seed(451)
   dens_fun_log <- function(x, mean) {dpois(x, lambda = poisson()$linkinv(mean), log = TRUE)}
 
   cov_eigen <- eigen(exp_cov)

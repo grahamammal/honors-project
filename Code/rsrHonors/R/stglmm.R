@@ -11,7 +11,8 @@ stglmm <- function(fixed,
                    priors,
                    tuning,
                    nu, # keep 2.5 for now
-                   rank,
+                   rank_sp,
+                   rank_tm,
                    mul = 2){ # rank to reduce spatial matrix to
 
   start_time <- Sys.time()
@@ -36,7 +37,7 @@ stglmm <- function(fixed,
     dens_fun_log <- function(x, mean) {dbinom(x, size = 1, prob = family$linkinv(mean), log = TRUE)}
   }
 
-  if(class(locations) == "data.frame") {
+  if (class(locations) == "data.frame") {
     locations = as.matrix(locations)
   }
 
@@ -75,6 +76,7 @@ stglmm <- function(fixed,
   phi_tm_b  <- priors[["phi_tm_unif"]][2]
 
 
+
   ###################################
   # Orig: define index for parameters
   # Must mean that parameters are stored in a single vector
@@ -82,10 +84,15 @@ stglmm <- function(fixed,
   ####################################
   nParams <- p + 2;
   beta_index <- 1:p;
-  sigma2_sp_index <- p + 1;
-  phi_index <- sigma2_sp_index + 1
-  delta_index <- (nParams + 1):(nParams + rank)
-  w_index <- (nParams + rank + 1):(nParams + rank + n)
+  sigma2_sp_index <- max(beta_index) + 1;
+  sigma2_tm_index <- sigma2_sp_index + 1;
+  phi_sp_index <- sigma2_tm_index + 1
+  phi_tm_index <- phi_sp_index + 1
+  delta_index <- (phi_tm_index + 1):(phi_tm_index + rank_sp)
+  w_index <- (max(delta_index) + 1):(max(delta_index) + n_s)
+  alpha_index <- (max(w_index) + 1):(max(w_index) + rank_tm)
+  v_index <- (max(alpha_index) + 1):(max(alpha_index) + n_t)
+
 
   #########################################
   # Orig: initialize some matrix for storage
@@ -97,21 +104,28 @@ stglmm <- function(fixed,
   sTunings <- sParams <- matrix(NA,nrow = nParams) # update the current parameters for each iteration
 
 
-  samples <- array(dim = c(iter, chains, nParams + rank + n),
+  samples <- array(dim = c(iter, chains, max(v_index)),
                    dimnames = list("Iteration" = 1:iter,
                                    "Chain" = 1:chains,
                                    "Parameter" = c(paste0("beta_", 0:(p - 1)),
-                                                   "sigma2",
-                                                   "phi",
-                                                   paste0("delta_", 1:rank),
-                                                   paste0("w_", 1:n))))
+                                                   "sigma2_sp",
+                                                   "phi_sp",
+                                                   "sigma2_tm",
+                                                   "phi_tm",
+                                                   paste0("delta_", 1:length(delta_index)),
+                                                   paste0("w_", 1:length(w_index)),
+                                                   paste0("alpha_", 1:length(alpha_index)),
+                                                   paste0("v_", 1:length(v_index)))))
 
 
   current_beta <- rep(NA_real_, p)
   current_sigma2_sp <- NA_real_
   current_phi <- NA_real_
-  current_delta <- rep(NA_real_, rank)
-  current_w <- rep(NA_real_, rank)
+  current_delta <- rep(NA_real_, rank_sp)
+  current_w <- rep(NA_real_, n_s)
+  current_alpha <- rep(NA_real_, rank_tm)
+  current_v <- rep(NA_real_, n_t)
+
 
   #########################################
   # Orig: feed in the initial values and tuning params
@@ -120,27 +134,28 @@ stglmm <- function(fixed,
 
 
   sTunings[beta_index] <- tuning[["beta"]]
-  sTunings[sigma2_sp_index] <- tuning[["s2"]]
-  sTunings[phi_index] <- tuning[["phi"]]
+  sTunings[sigma2_sp_index] <- tuning[["s2_sp"]]
+  sTunings[phi_sp_index] <- tuning[["phi_sp"]]
+  sTunings[sigma2_tm_index] <- tuning[["s2_tm"]]
+  sTunings[phi_tm_index] <- tuning[["phi_tm"]]
 
+  deltaTunings <- rep(tuning[["delta"]],rank_sp)
+  alphaTunings <- rep(tuning[["alpha"]],rank_tm)
 
-  wTunings <- rep(tuning[["w"]],rank)
-  wTunings <- log(wTunings)
-  sTunings <- log(sTunings)
 
 
 
   # Stores info on acceptance rates for MCMC
   # for acceptance rate
   accept_s <- matrix(NA, ncol = nParams, nrow = chains)
-  accept_w <- matrix(NA, ncol = rank, nrow = chains)
+  accept_w <- matrix(NA, ncol = rank_sp, nrow = chains)
 
 
 
   ##### start MCMC loop #####
   for (k in 1:chains) {
     sAccepts <- matrix(0,nrow = nParams)
-    wAccepts <- matrix(0,nrow = rank)
+    wAccepts <- matrix(0,nrow = rank_sp)
 
     # Generate Chain Starting positions following stan recomendation
 
@@ -164,11 +179,11 @@ stglmm <- function(fixed,
     est_time  <- Sys.time() - est_start # calculates how long one random projection takes
     message("Estimated time (hrs):",round((chains - k + 1)*iter*2*est_time/3600, 3) ,"\n") # prints out estimate time in hours
 
-    K.rp = list(d = K[[1]],u = K[[2]][,1:rank]) # d is sing values, u is left sing vecs, only take first 1:rank
-    d <- (K.rp$d[1:rank])^2 # approximated eigenvalues
-    U1 <- U <- u <- K.rp$u[,1:rank] # approximated eigenvectors
+    K.rp = list(d = K[[1]],u = K[[2]][,1:rank_sp]) # d is sing values, u is left sing vecs, only take first 1:rank
+    d <- (K.rp$d[1:rank_sp])^2 # approximated eigenvalues
+    U1 <- U <- u <- K.rp$u[,1:rank_sp] # approximated eigenvectors
 
-    current_delta <- runif(rank, min = -2, max = 2)
+    current_delta <- runif(rank_sp, min = -2, max = 2)
     current_w <- U %*% (sqrt(d)*current_delta)
 
 
@@ -184,7 +199,7 @@ stglmm <- function(fixed,
       #########################################################
 
       # propose from normal
-      beta_proposal <- rnorm(p, current_beta, sd = exp(sTunings[beta_index])) # draw for proposed beta params
+      beta_proposal <- rnorm(p, current_beta, sd = sTunings[beta_index]) # draw for proposed beta params
 
       # calculate likelihood ratio
       beta_current_likelihood <- beta_log_full_conditional_st(current_beta, current_w = current_w, X = X,
@@ -215,11 +230,11 @@ stglmm <- function(fixed,
       #########################################################
 
       # propose from normal
-      phi_proposal <-  rnorm(1, current_phi, sd = exp(sTunings[phi_index]))
+      phi_proposal <-  rnorm(1, current_phi, sd = sTunings[phi_index])
       phi_proposal_likelihood <- phi_current_likelihood <- phi_sp_log_full_conditional(current_phi, dist_space = dist_space, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
                                                                                     O = O, # observations
                                                                                     current_sigma2_sp = current_sigma2_sp, # priors
-                                                                                    nu = nu, n_s = n_s, n_t = n_t, rk = rk, cores = cores, rank = rank, # control params
+                                                                                    nu = nu, n_s = n_s, n_t = n_t, rk = rk, cores = cores, rank = rank_sp, # control params
                                                                                     dens_fun_log = dens_fun_log)
 
 
@@ -229,7 +244,7 @@ stglmm <- function(fixed,
         phi_proposal_likelihood <- phi_sp_log_full_conditional(phi_proposal, dist_space = dist_space, xbeta = xbeta, current_delta = current_delta, U1 = U1, # data and params
                                                             O = O, # observations
                                                             current_sigma2_sp = current_sigma2_sp, # priors
-                                                            nu = nu, n_s = n_s, n_t = n_t, rk = rk, cores = cores, rank = rank, # control params
+                                                            nu = nu, n_s = n_s, n_t = n_t, rk = rk, cores = cores, rank = rank_sp, # control params
                                                             dens_fun_log = dens_fun_log)
       } else {
         phi_proposal_likelihood$likelihood <- -Inf
@@ -251,15 +266,15 @@ stglmm <- function(fixed,
       # Block Update Sigma 2
       #########################################################
 
-      sigma2_sp_proposal <- rnorm(1, current_sigma2_sp, sd = exp(sTunings[sigma2_sp_index]))
+      sigma2_sp_proposal <- rnorm(1, current_sigma2_sp, sd = sTunings[sigma2_sp_index])
       if (sigma2_sp_proposal > 0) {
         sigma2_sp_current_likelihood <- sigma2_log_full_conditional(sigma2 = current_sigma2_sp, twKinvw = twKinvw,
                                                                  s2_a = s2_sp_a, s2_b = s2_sp_b,
-                                                                 rank = rank)
+                                                                 rank = rank_sp)
 
         sigma2_sp_proposal_likelihood <-  sigma2_log_full_conditional(sigma2 = sigma2_sp_proposal, twKinvw = twKinvw,
                                                                    s2_a = s2_sp_a, s2_b = s2_sp_b,
-                                                                   rank = rank)
+                                                                   rank = rank_sp)
         sigma2_sp_lr <- sigma2_sp_proposal_likelihood - sigma2_sp_current_likelihood
       } else {
         sigma2_sp_lr <- -Inf
@@ -275,7 +290,7 @@ stglmm <- function(fixed,
       }
 
       # update random effects using multivariate random walk with spherical normal proposal
-      delta_proposal <- rnorm(rank, current_delta, sd = exp(wTunings))
+      delta_proposal <- rnorm(rank_sp, current_delta, sd = wTunings)
 
       delta_proposal_likelihood <- delta_log_full_conditional_st(delta = delta_proposal, xbeta = xbeta,  U = U, d = d,
                                                               O = O,
@@ -301,9 +316,11 @@ stglmm <- function(fixed,
       samples_w[(k - 1)*iter + i,] <- current_w
       samples_eta[(k - 1)*iter + i,] <- current_delta
 
-      samples[i, k, 1:nParams] <- c(current_beta, current_sigma2_sp, current_phi) # stores fixed effects draw and variance and spatial range draw
-      samples[i, k, (nParams + 1):(nParams + rank)] <- current_delta # stores draw for synthetic variable of spatial effects
-      samples[i, k, (nParams + 1 + rank):(nParams + rank + n)] <- current_w # stores draw of spatial effect (computed from delta draw)
+      samples[i, k, c(beta_index, sigma2_sp_index, phi_sp_index, sigma2_tm_index, phi_tm_index)] <- c(current_beta, current_sigma2_sp, current_phi_sp, current_sigma2_tm, current_phi_tm) # stores fixed effects draw and variance and spatial range draw
+      samples[i, k, delta_index] <- current_delta # stores draw for synthetic variable of spatial effects
+      samples[i, k, w_index] <- current_w # stores draw of spatial effect (computed from delta draw)
+      samples[i, k, alpha_index] <- current_alpha
+      samples[i, k, v_index] <- current_v
     }
 
     output_progress(beta_draws = samples[, k, beta_index], sAccepts = sAccepts,
