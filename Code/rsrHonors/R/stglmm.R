@@ -397,15 +397,15 @@ stglmm <- function(fixed,
       # update random effects using multivariate random walk with spherical normal proposal
       alpha_proposal <- rnorm(rank_tm, current_alpha, sd = alphaTunings)
 
-      alpha_proposal_likelihood <- alpha_log_full_conditional(alpha = alpha_proposal, xbeta = xbeta,  V = V, l = l,
+      alpha_proposal_likelihood <- alpha_log_full_conditional(alpha = alpha_proposal, xbeta = xbeta,  V = V, l = l, current_w = current_w,
                                                                  O = O,
-                                                                 n_s = n_s,
+                                                                 n_s = n_s, n_t = n_t,
                                                                  current_sigma2_tm = current_sigma2_tm,
                                                                  dens_fun_log = dens_fun_log)
 
-      alpha_current_likelihood <- alpha_log_full_conditional(alpha = current_alpha, xbeta = xbeta,  V = V, l = l,
+      alpha_current_likelihood <- alpha_log_full_conditional(alpha = current_alpha, xbeta = xbeta,  V = V, l = l, current_w = current_w,
                                                                 O = O,
-                                                                n_s = n_s,
+                                                                n_s = n_s, n_t = n_t,
                                                                 current_sigma2_tm = current_sigma2_tm,
                                                                 dens_fun_log = dens_fun_log)
       alpha_lr <- alpha_proposal_likelihood$lr - alpha_current_likelihood$lr
