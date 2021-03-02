@@ -164,11 +164,13 @@ test_that("stglmm beta full conditional correct", {
   expect_snapshot_value(beta_log_full_conditional_st(beta = beta,
                                                   X = X,
                                                   current_w = W,
+                                                  current_v = rep(0.1, n_t),
                                                   O = y_pois,
                                                   p = 4,
                                                   beta.b = 100,
                                                   dens_fun_log = dens_fun_log,
-                                                  n_t = n_t), style = "serialize")
+                                                  n_t = n_t,
+                                                  n_s = n_s), style = "serialize")
 
 })
 
@@ -186,7 +188,9 @@ test_that("stglmm delta full conditional correct", {
                                                    O = y_pois,
                                                    U = U,
                                                    d = d,
+                                                   current_v = rep(0.1, n_t),
                                                    n_t = n_t,
+                                                   n_s = n_s,
                                                    xbeta = X %*% beta,
                                                    current_sigma2_sp = 1,
                                                    dens_fun_log = dens_fun_log), style = "serialize")
@@ -208,6 +212,7 @@ test_that("stglmm phi_sp full conditional correct", {
                                                  O = y_pois,
                                                  n_s = n_s,
                                                  n_t = n_t,
+                                                 current_v = rep(0.1, n_t),
                                                  nu = nu,
                                                  cores = 1,
                                                  dens_fun_log = dens_fun_log,
@@ -229,8 +234,9 @@ test_that("stglmm alpha full conditional correct", {
 
   expect_snapshot_value(alpha_log_full_conditional(alpha = -4:5/10,
                                                    O = y_pois,
-                                                   U = U,
-                                                   d = d,
+                                                   V = U,
+                                                   l = d,
+                                                   current_w = rep(0.1, n_s),
                                                    n_s = 100,
                                                    xbeta = X %*% beta,
                                                    current_sigma2_tm = 1,
@@ -250,13 +256,14 @@ test_that("stglmm phi_tm full conditional correct", {
   expect_snapshot_value(phi_tm_log_full_conditional(phi = 0.2,
                                                     dist_time = as.matrix(dist(time)),
                                                     O = y_pois,
+                                                    current_w = rep(0.1, n_s),
                                                     n_s = n_s,
                                                     n_t = n_t,
                                                     rank = 10,
                                                     nu = nu,
                                                     cores = 1,
                                                     dens_fun_log = dens_fun_log,
-                                                    U1 = U,
+                                                    V1 = U,
                                                     xbeta = X %*% beta,
                                                     current_alpha = -4:5/10,
                                                     current_sigma2_tm = 1), style = "serialize")})
