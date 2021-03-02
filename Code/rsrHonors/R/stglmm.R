@@ -48,7 +48,7 @@ stglmm <- function(fixed,
   p = ncol(X) # expected rank of X
   n <- length(O) # number of observations
   n_s <- nrow(locations)
-  n_t <- length(time)
+  n_t <- length(times)
 
   #######################################
   # Prepare MCMC iteration values
@@ -157,7 +157,8 @@ stglmm <- function(fixed,
     current_sigma2_sp <- exp(runif(1, min = -2, max = 2))
     current_phi_sp <- phi_sp_a + (phi_sp_b - phi_sp_a)/(1 + exp(-runif(1, min = -2, max = 2)))
 
-
+    current_sigma2_tm <- exp(runif(1, min = -2, max = 2))
+    current_phi_tm <- phi_tm_a + (phi_tm_b - phi_tm_b) / (1 + exp(-runif(1, min = -2, max = 2)))
 
     est_start  <- Sys.time()
     # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm.
@@ -170,8 +171,6 @@ stglmm <- function(fixed,
       as.integer(cores),# number of cores
       cov_fun = 0
     ) # C++ function for approximating eigenvectors
-    est_time  <- Sys.time() - est_start # calculates how long one random projection takes
-    message("Estimated time (hrs):",round((chains - k + 1)*iter*2*est_time/3600, 3) ,"\n") # prints out estimate time in hours
 
     K.rp = list(d = K[[1]],u = K[[2]][,1:rank_sp]) # d is sing values, u is left sing vecs, only take first 1:rank
     d <- (K.rp$d[1:rank_sp])^2 # approximated eigenvalues
@@ -179,6 +178,28 @@ stglmm <- function(fixed,
 
     current_delta <- runif(rank_sp, min = -2, max = 2)
     current_w <- U %*% (sqrt(d)*current_delta)
+
+    J = rp(
+      current_phi_tm, # single number, phi in starting param list
+      dist_time, #literally x,y locations of obs
+      n_t, # number of points
+      rank_tm,
+      nu, #nu as before
+      as.integer(cores),# number of cores
+      cov_fun = 1
+    ) # C++ function for approximating eigenvectors
+
+    est_time  <- Sys.time() - est_start # calculates how long one random projection takes
+    message("Estimated time (hrs):",round((chains - k + 1)*iter*2*est_time/3600, 3) ,"\n") # prints out estimate time in hours
+
+
+    J.rp = list(l = J[[1]], v = J[[2]][,1:rank_tm]) # d is sing values, u is left sing vecs, only take first 1:rank
+    l <- (J.rp$l[1:rank_tm])^2 # approximated eigenvalues
+    V1 <- V <- v <- J.rp$v[,1:rank_tm] # approximated eigenvectors
+
+    current_alpha <- runif(rank_tm, min = -2, max = 2)
+    current_v <-  V %*% (sqrt(l)*current_alpha)
+
 
 
     xbeta <- X %*% current_beta
@@ -314,7 +335,7 @@ stglmm <- function(fixed,
 
       # propose from normal
       phi_tm_proposal <-  rnorm(1, current_phi_tm, sd = sTunings[phi_tm_index])
-      phi_tm_proposal_likelihood <- phi_tm_current_likelihood <- phi_tm_log_full_conditional(current_phi_tm, dist_time = dist_time, xbeta = xbeta, current_delta = current_delta, V1 = V1, # data and params
+      phi_tm_proposal_likelihood <- phi_tm_current_likelihood <- phi_tm_log_full_conditional(current_phi_tm, dist_time = dist_time, xbeta = xbeta, current_alpha = current_alpha, V1 = V1, # data and params
                                                                                              O = O, # observations
                                                                                              current_sigma2_tm = current_sigma2_tm, # priors
                                                                                              nu = nu, n_s = n_s, n_t = n_t, rank = rank_tm, cores = cores, # control params

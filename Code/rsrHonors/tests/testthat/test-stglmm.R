@@ -54,6 +54,18 @@ sim_data <- data.frame(x1 = x1, x2 = x2, x3 = x3,
                        y_norm = y_norm,
                        y_binom = y_binom)
 
+
+J = rp(
+  0.5, # single number, phi in starting param list
+  h, #literally x,y locations of obs
+  n_t, # number of points
+  5,
+  nu, #nu as before
+  as.integer(1),# number of cores
+  1
+) # C++ function for approximating eigenvectors
+
+
 test_that("test poisson stglmm runs", {
   # run poisson model
 
@@ -81,7 +93,7 @@ test_that("test poisson stglmm runs", {
                   "alpha" = 0.1),
     nu = nu,
     rank_sp = 10,
-    rank_tm = 10)
+    rank_tm = 5)
 
   expect_type(poisson_model, "list")
   expect_snapshot(poisson_model$p.params)
@@ -112,7 +124,7 @@ test_that("test linear stglmm runs", {
                   "alpha" = 0.1),
     nu = nu,
     rank_sp = 10,
-    rank_tm = 10)
+    rank_tm = 5)
 
   expect_type(linear_model, "list")
 })
@@ -142,7 +154,7 @@ test_that("test logistic stglmm runs", {
                   "alpha" = 0.1),
     nu = nu,
     rank_sp = 10,
-    rank_tm = 10), "list")
+    rank_tm = 5), "list")
 })
 
 test_that("stglmm beta full conditional correct", {
