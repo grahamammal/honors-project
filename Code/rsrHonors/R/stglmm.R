@@ -7,7 +7,6 @@ stglmm <- function(fixed,
                    iter,
                    chains,
                    cores,
-                   param_start,
                    priors,
                    tuning,
                    nu, # keep 2.5 for now
@@ -42,14 +41,12 @@ stglmm <- function(fixed,
 
 
   dist_space <- as.matrix(dist(locations))
+  dist_time <- as.matrix(dist(times))
 
-  # TODO: change this to param_start, then figure out how to get rid of it
 
-  starting <- param_start
   ptm <- proc.time() # starting time
   p = ncol(X) # expected rank of X
   n <- length(O) # number of observations
-  AP = chol2inv(chol(crossprod(X,X))) %*% t(X) # projection onto column space of X
   n_s <- nrow(locations)
   n_t <- length(time)
 
@@ -153,7 +150,7 @@ stglmm <- function(fixed,
   for (k in 1:chains) {
     sAccepts <- matrix(0,nrow = nParams)
     wAccepts <- matrix(0,nrow = rank_sp)
-
+    vAccepts <- matrix(0, nrow = rank_tm)
     # Generate Chain Starting positions following stan recomendation
 
     current_beta <- runif(p, min = -2, max = 2)
@@ -223,7 +220,7 @@ stglmm <- function(fixed,
       }
 
       #########################################################
-      # Block Update Phi
+      # Block Update Phi Spatial
       #########################################################
 
       # propose from normal
@@ -260,7 +257,7 @@ stglmm <- function(fixed,
       twKinvw <- phi_sp_current_likelihood$twKinvw # current delta cross product for some reason
 
       #########################################################
-      # Block Update Sigma 2
+      # Block Update Sigma 2 Spatial
       #########################################################
 
       sigma2_sp_proposal <- rnorm(1, current_sigma2_sp, sd = sTunings[sigma2_sp_index])
@@ -277,14 +274,16 @@ stglmm <- function(fixed,
         sigma2_sp_lr <- -Inf
       }
 
-      #########################################################
-      # Block Update Delta
-      #########################################################
-
       if (log(runif(1)) < sigma2_sp_lr) {
         current_sigma2_sp <- sigma2_sp_proposal
         sAccepts[sigma2_sp_index] <- sAccepts[sigma2_sp_index] + 1
       }
+
+      #########################################################
+      # Block Update Delta
+      #########################################################
+
+
 
       # update random effects using multivariate random walk with spherical normal proposal
       delta_proposal <- rnorm(rank_sp, current_delta, sd = deltaTunings)
@@ -308,6 +307,96 @@ stglmm <- function(fixed,
         delta_current_likelihood <- delta_proposal_likelihood
         current_w <- delta_current_likelihood$w
       }
+
+      #########################################################
+      # Block Update Phi Temporal
+      #########################################################
+
+      # propose from normal
+      phi_tm_proposal <-  rnorm(1, current_phi_tm, sd = sTunings[phi_tm_index])
+      phi_tm_proposal_likelihood <- phi_tm_current_likelihood <- phi_tm_log_full_conditional(current_phi_tm, dist_time = dist_time, xbeta = xbeta, current_delta = current_delta, V1 = V1, # data and params
+                                                                                             O = O, # observations
+                                                                                             current_sigma2_tm = current_sigma2_tm, # priors
+                                                                                             nu = nu, n_s = n_s, n_t = n_t, rank = rank_tm, cores = cores, # control params
+                                                                                             dens_fun_log = dens_fun_log)
+
+
+
+      # checks if guess in bounds of Unif(a, b) prior
+      if (phi_tm_proposal < phi_tm_b & phi_tm_proposal > phi_tm_a) {
+        phi_tm_proposal_likelihood <- phi_tm_log_full_conditional(phi_tm_proposal, dist_space = dist_space, xbeta = xbeta, current_alpha = current_alpha, V1 = V1, # data and params
+                                                                  O = O, # observations
+                                                                  current_sigma2_tm = current_sigma2_tm, # priors
+                                                                  nu = nu, n_s = n_s, n_t = n_t, rank = rank_tm, cores = cores, # control params
+                                                                  dens_fun_log = dens_fun_log)
+      } else {
+        phi_tm_proposal_likelihood$likelihood <- -Inf
+      }
+      phi_tm_lr <- phi_tm_proposal_likelihood$likelihood - phi_tm_current_likelihood$likelihood
+
+      if (log(runif(1)) < phi_tm_lr) {
+        current_phi_tm <- phi_tm_proposal
+        sAccepts[phi_tm_index] <- sAccepts[phi_tm_index] + 1
+        phi_tm_current_likelihood <- phi_tm_proposal_likelihood
+        d <- phi_tm_current_likelihood$d # approximated eigenvalues^2
+        V <- phi_tm_current_likelihood$V # gives PPERP%*%u restrict random effect to be orthogonal to fix effect
+        u <- phi_tm_current_likelihood$u # approximated eigenvectors
+      }
+
+      twKinvw <- phi_tm_current_likelihood$twKinvw # current delta cross product for some reason
+
+
+
+      #########################################################
+      # Block Update Sigma 2 Temporal
+      #########################################################
+
+      sigma2_tm_proposal <- rnorm(1, current_sigma2_tm, sd = sTunings[sigma2_tm_index])
+      if (sigma2_tm_proposal > 0) {
+        sigma2_tm_current_likelihood <- sigma2_log_full_conditional(sigma2 = current_sigma2_tm, twKinvw = twKinvw,
+                                                                    s2_a = s2_tm_a, s2_b = s2_tm_b,
+                                                                    rank = rank_tm)
+
+        sigma2_tm_proposal_likelihood <-  sigma2_log_full_conditional(sigma2 = sigma2_tm_proposal, twKinvw = twKinvw,
+                                                                      s2_a = s2_tm_a, s2_b = s2_tm_b,
+                                                                      rank = rank_tm)
+        sigma2_tm_lr <- sigma2_tm_proposal_likelihood - sigma2_tm_current_likelihood
+      } else {
+        sigma2_tm_lr <- -Inf
+      }
+
+      if (log(runif(1)) < sigma2_tm_lr) {
+        current_sigma2_tm <- sigma2_tm_proposal
+        sAccepts[sigma2_tm_index] <- sAccepts[sigma2_tm_index] + 1
+      }
+
+      #########################################################
+      # Block Update Alpha
+      #########################################################
+
+      # update random effects using multivariate random walk with spherical normal proposal
+      alpha_proposal <- rnorm(rank_tm, current_alpha, sd = alphaTunings)
+
+      alpha_proposal_likelihood <- alpha_log_full_conditional(alpha = alpha_proposal, xbeta = xbeta,  V = V, d = d,
+                                                                 O = O,
+                                                                 n_t = n_t,
+                                                                 current_sigma2_tm = current_sigma2_tm,
+                                                                 dens_fun_log = dens_fun_log)
+
+      alpha_current_likelihood <- alpha_log_full_conditional(alpha = current_alpha, xbeta = xbeta,  V = V, d = d,
+                                                                O = O,
+                                                                n_t = n_t,
+                                                                current_sigma2_tm = current_sigma2_tm,
+                                                                dens_fun_log = dens_fun_log)
+      alpha_lr <- alpha_proposal_likelihood$lr - alpha_current_likelihood$lr
+
+      if (log(runif(1)) < alpha_lr) {
+        current_alpha <- alpha_proposal
+        vAccepts <- vAccepts + 1
+        alpha_current_likelihood <- alpha_proposal_likelihood
+        current_v <- alpha_current_likelihood$w
+      }
+
 
       samples_w[(k - 1)*iter + i,] <- current_w
       samples_eta[(k - 1)*iter + i,] <- current_delta

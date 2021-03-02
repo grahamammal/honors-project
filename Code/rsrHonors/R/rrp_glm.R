@@ -261,14 +261,16 @@ rrp_glm <- function(fixed,
         sigma2_lr <- -Inf
       }
 
-      #########################################################
-      # Block Update Delta
-      #########################################################
 
       if (log(runif(1)) < sigma2_lr) {
         current_sigma2 <- sigma2_proposal
         sAccepts[sigma2_index] <- sAccepts[sigma2_index] + 1
       }
+
+      #########################################################
+      # Block Update Delta
+      #########################################################
+
 
       # update random effects using multivariate random walk with spherical normal proposal
       delta_proposal <- rnorm(rank, current_delta, sd = exp(wTunings))

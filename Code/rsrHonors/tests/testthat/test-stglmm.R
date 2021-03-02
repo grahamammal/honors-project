@@ -67,9 +67,6 @@ test_that("test poisson stglmm runs", {
     iter = 1000,
     chains = 2,
     cores = 1,
-    param_start = list("beta" = rnorm(4, 5, sd = 0.5),
-                       "s2" = 2,
-                       "phi" = 0.5),
     priors = list("beta.normal" = 100, # variance of beta prior
                   "s2_sp_IG" = c(2,2), # inverse gamma params
                   "s2_tm_IG" = c(2,2),
@@ -101,9 +98,6 @@ test_that("test linear stglmm runs", {
     iter = 1000,
     chains = 2,
     cores = 1,
-    param_start = list("beta" = rnorm(4, 5, sd = 0.5),
-                       "s2" = 2,
-                       "phi" = 0.5),
     priors = list("beta.normal" = 100, # variance of beta prior
                   "s2_sp_IG" = c(2,2), # inverse gamma params
                   "s2_tm_IG" = c(2,2),
@@ -134,9 +128,6 @@ test_that("test logistic stglmm runs", {
     iter = 1000,
     chains = 2,
     cores = 1,
-    param_start = list("beta" = rnorm(4, 5, sd = 0.5),
-                       "s2" = 2,
-                       "phi" = 0.5),
     priors = list("beta.normal" = c(100), # variance of beta prior
                   "s2_sp_IG" = c(2,2), # inverse gamma params
                   "s2_tm_IG" = c(2,2),
