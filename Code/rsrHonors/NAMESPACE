@@ -2,5 +2,6 @@
 
 export(mmC)
 export(rp)
+export(stglmm)
 importFrom(Rcpp,sourceCpp)
 useDynLib(rsrHonors)

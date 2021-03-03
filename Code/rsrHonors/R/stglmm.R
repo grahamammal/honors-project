@@ -1,9 +1,62 @@
+#' Fitting Spatial temporal GLMMs
+#'
+#' \code{stglmm} fits a spatial temporal generalized linear mixed model
+#'
+#' This function fits the spatial temporal GLMM with additive covariance, matern spatial covariance,
+#' and squared exponential temporal covariance. It uses the random projections algorithm
+#'
+#' @param fixed an object of class formula specifying the fixed effects
+#' @param data covariates and outcome variables for the model
+#' @param locations a 2 by n matrix containing each location as an x, y pair
+#' @param times a vector containing each time
+#' @param family a description of the error distribution and link function,
+#' either a character string that is one of "poisson", "gaussian", or "binomial", or
+#' the family function corresponding to one of these.
+#' @param covfn TODO: Delete this
+#' @param iter the number of iterations to run each chain
+#' @param chains the number of chains to run
+#' @param cores right now nothing, idk how to parallelize
+#' @param priors a complicated list of priors, see examples
+#' @param tuning a complicated list of tuning parameters, see examples
+#' @param nu a parameter for the Matern covariance function, is always 2.5 right now
+#' @param rank_sp the rank of the approximation of the spatial covariance matrix
+#' @param rank_tm the rank of the approximation of the temporal covariance matrix
+#' @return A list containing all of the info you need
+#' @examples
+#' \dontrun{
+#'stglmm(
+#' fixed = y_pois ~ x1 + x2 + x3,
+#' data = sim_data,
+#' locations = locations,
+#' times = time,
+#' family = poisson(),
+#' covfn = covfndef(nu),
+#' iter = 1000,
+#' chains = 2,
+#' cores = 1,
+#' priors = list("beta.normal" = 100, # variance of beta prior
+#'               "s2_sp_IG" = c(2,2), # inverse gamma params
+#'               "s2_tm_IG" = c(2,2),
+#'               "phi_sp_unif" = c(0.01, 1.5),
+#'               "phi_tm_unif" = c(0.01, 1.5)), # uniform prior on phi
+#' tuning = list("beta" = rnorm(4, 1, 0.2),
+#'               "s2_sp" = 0.1,
+#'               "phi_sp" = 0.01,
+#'               "s2_tm" = 0.1,
+#'               "phi_tm" = 0.01,
+#'               "delta" = 0.1,
+#'               "alpha" = 0.1),
+#' nu = nu,
+#' rank_sp = 10,
+#' rank_tm = 5)
+#' }
+#' @export
 stglmm <- function(fixed,
                    data,
                    locations,
                    times,
                    family,
-                   covfn,
+                   covfn, # TODO: Delete covfn, it doesn't do anything
                    iter,
                    chains,
                    cores,
@@ -252,8 +305,6 @@ stglmm <- function(fixed,
                                                                                     nu = nu, n_s = n_s, n_t = n_t, rank = rank_sp, cores = cores, # control params
                                                                                     dens_fun_log = dens_fun_log)
 
-
-
       # checks if guess in bounds of Unif(a, b) prior
       if (phi_sp_proposal < phi_sp_b & phi_sp_proposal > phi_sp_a) {
         phi_sp_proposal_likelihood <- phi_sp_log_full_conditional(phi_sp_proposal, dist_space = dist_space, xbeta = xbeta, current_delta = current_delta, U1 = U1, current_v = current_v, # data and params
@@ -341,7 +392,6 @@ stglmm <- function(fixed,
                                                                                              nu = nu, n_s = n_s, n_t = n_t, rank = rank_tm, cores = cores, # control params
                                                                                              dens_fun_log = dens_fun_log)
 
-
       # checks if guess in bounds of Unif(a, b) prior
       if (phi_tm_proposal < phi_tm_b & phi_tm_proposal > phi_tm_a) {
         phi_tm_proposal_likelihood <- phi_tm_log_full_conditional(phi_tm_proposal, dist_time = dist_time, xbeta = xbeta, current_alpha = current_alpha, V1 = V1, current_w = current_w, # data and params
@@ -370,7 +420,6 @@ stglmm <- function(fixed,
       #########################################################
       # Block Update Sigma 2 Temporal
       #########################################################
-
       sigma2_tm_proposal <- rnorm(1, current_sigma2_tm, sd = sTunings[sigma2_tm_index])
       if (sigma2_tm_proposal > 0) {
         sigma2_tm_current_likelihood <- sigma2_log_full_conditional(sigma2 = current_sigma2_tm, twKinvw = twKinvw,

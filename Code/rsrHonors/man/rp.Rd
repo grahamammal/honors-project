@@ -4,7 +4,7 @@
 \alias{rp}
 \title{Multiply a number by two}
 \usage{
-rp(phi_r, coords, n_r, r_r, nu_r, num_r)
+rp(phi_r, dist, n_r, r_r, nu_r, num_r, cov_fun)
 }
 \arguments{
 \item{x}{A single integer.}

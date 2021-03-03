@@ -1,0 +1,122 @@
+---
+title: "Applications"
+output: html_document
+---
+
+```{r}
+library(rsrHonors)
+library(bayesplot)
+```
+
+
+Let's start by fitting a simple simulated data set. And this time we'll really tune it. 
+
+```{r}
+rmvn <- function(n, mu = 0, V = matrix(1)){
+  p <- length(mu)
+  if (any(is.na(match(dim(V), p))))
+    stop("Dimension problem!")
+  D <- chol(V)
+  t(matrix(rnorm(n*p), ncol = p) %*% D + rep(mu, rep(n, p)))
+}
+# simulate data
+set.seed(451)
+n_s <- 200
+n_t <- 100
+
+
+nu <- 2.5
+sigma2_sp <- 1
+sigma2_tm <- 1
+phi_sp <- 0.5
+phi_tm <- 0.5
+tau2 <- 0.1
+
+x0 <- rep(1, n_s * n_t)
+x1 <- rep(runif(n_s), times = n_t)
+x2 <- rep(runif(n_s), times = n_t)
+x3 <- rnorm(n_s*n_t)
+
+time <- 1:n_t / n_t
+
+locations <- data.frame(x1 = x1[1:n_s], x2 = x2[1:n_s])
+
+
+X <- cbind(x0, x1, x2, x3)
+beta <- c(0,1,1,-2)
+
+
+d <- as.matrix(dist(data.frame(x1 = x1[1:n_s],
+                               x2 = x2[1:n_s])))
+matern_covariance <- sigma2_sp * (1 + sqrt(5)*d/phi_sp + 5*d^2 / (3*phi_sp^2)) * exp(-1*sqrt(5)*d/phi_sp)
+
+h <- as.matrix(dist(time))
+exp_cov <- sigma2_tm * exp(-h/phi_tm)
+
+
+W <- rmvn(n = 1, mu = rep(0, n_s), V = matern_covariance)
+V <- rmvn(n = 1, mu = rep(0, n_t), V = exp_cov)
+
+
+y_mean <- as.numeric(X %*% beta + rep(W, times = n_t) + rep(V, each = n_s))
+
+y_pois <- rpois(n_s * n_t, exp(y_mean))
+y_norm <- rnorm(n_s * n_t, y_mean, sqrt(tau2))
+y_binom <- rbinom(n_s * n_t, 1, exp(y_mean)/(1 + exp(y_mean)))
+
+sim_data <- data.frame(x1 = x1, x2 = x2, x3 = x3,
+                       W = rep(W, times = n_t),
+                       V = rep(V, each = n_s),
+                       y_mean = y_mean,
+                       y_pois = y_pois,
+                       y_norm = y_norm,
+                       y_binom = y_binom)
+
+```
+
+
+```{r}
+simulated_stglmm <- stglmm(
+  fixed = y_pois ~ x1 + x2 + x3,
+  data = sim_data,
+  locations = locations,
+  times = time,
+  family = poisson(),
+  covfn = 2.5,
+  iter = 1000,
+  chains = 2,
+  cores = 1,
+  priors = list("beta.normal" = 100, # variance of beta prior
+                "s2_sp_IG" = c(2,2), # inverse gamma params
+                "s2_tm_IG" = c(2,2),
+                "phi_sp_unif" = c(0.01, 1.5),
+                "phi_tm_unif" = c(0.01, 1.5)), # uniform prior on phi
+  tuning = list("beta" = c(0.1, apply(X[,2:4], 2, sd)),
+                "s2_sp" = 0.1,
+                "phi_sp" = 1,
+                "s2_tm" = 0.1,
+                "phi_tm" = 0.01,
+                "delta" = 0.1,
+                "alpha" = 0.1),
+  nu = nu,
+  rank_sp = 10,
+  rank_tm = 5)
+```
+```{r}
+simulated_stglmm$accepts
+mcmc_trace(simulated_stglmm$samples,
+           regex_pars = "beta.*" )
+
+mcmc_trace(simulated_stglmm$samples,
+           regex_pars = "sigma.*" )
+
+mcmc_trace(simulated_stglmm$samples,
+           regex_pars = "phi.*" )
+
+mcmc_trace(simulated_stglmm$samples,
+           regex_pars = "delta.*" )
+
+mcmc_trace(simulated_stglmm$samples,
+           regex_pars = "alpha.*" )
+```
+
