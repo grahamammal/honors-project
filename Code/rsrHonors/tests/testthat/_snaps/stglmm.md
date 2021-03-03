@@ -5028,7 +5028,7 @@
            999  1.1963273 4.1480180
            1000 1.3495540 4.1993323
       
-      , , Parameter = phi_sp
+      , , Parameter = sigma2_tm
       
                Chain
       Iteration         1         2
@@ -6033,7 +6033,7 @@
            999  2.4469540 0.8171657
            1000 2.6200383 0.8285981
       
-      , , Parameter = sigma2_tm
+      , , Parameter = phi_sp
       
                Chain
       Iteration         1        2
