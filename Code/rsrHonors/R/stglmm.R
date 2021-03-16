@@ -60,6 +60,7 @@ stglmm <- function(fixed,
                    iter,
                    chains,
                    cores,
+                   param_start = NULL,
                    priors,
                    tuning,
                    nu, # keep 2.5 for now
@@ -145,8 +146,8 @@ stglmm <- function(fixed,
   # Orig: initialize some matrix for storage
   # Prepares matrices to hold estimates of parameters
   #########################################
-  samples_eta <- matrix(NA,ncol = rank_sp, nrow = niter) # store the r.e samples
-  samples_w <- matrix(NA,ncol = n,nrow = niter) # store the r.e samples
+  samples_v <- matrix(NA,ncol = n_t, nrow = niter) # store the r.e samples
+  samples_w <- matrix(NA,ncol = n_s,nrow = niter) # store the r.e samples
   sTunings <- sParams <- matrix(NA,nrow = nParams) # update the current parameters for each iteration
 
   samples <- array(dim = c(iter, chains, max(v_index)),
@@ -205,13 +206,23 @@ stglmm <- function(fixed,
     wAccepts <- matrix(0,nrow = rank_sp)
     vAccepts <- matrix(0, nrow = rank_tm)
     # Generate Chain Starting positions following stan recomendation
+    if(!is.null(param_start)) {
+      current_beta <- param_start[["beta"]]
+      current_sigma2_sp <- param_start[["s2_sp"]]
+      current_phi_sp <- param_start[["phi_sp"]]
 
-    current_beta <- runif(p, min = -2, max = 2)
-    current_sigma2_sp <- exp(runif(1, min = -2, max = 2))
-    current_phi_sp <- phi_sp_a + (phi_sp_b - phi_sp_a)/(1 + exp(-runif(1, min = -2, max = 2)))
+      current_sigma2_tm <- param_start[["s2_tm"]]
+      current_phi_tm <- param_start[["phi_tm"]]
+    } else{
+      current_beta <- runif(p, min = -2, max = 2)
+      current_sigma2_sp <- exp(runif(1, min = -2, max = 2))
+      current_phi_sp <- phi_sp_a + (phi_sp_b - phi_sp_a)/(1 + exp(-runif(1, min = -2, max = 2)))
 
-    current_sigma2_tm <- exp(runif(1, min = -2, max = 2))
-    current_phi_tm <- phi_tm_a + (phi_tm_b - phi_tm_b) / (1 + exp(-runif(1, min = -2, max = 2)))
+      current_sigma2_tm <- exp(runif(1, min = -2, max = 2))
+      current_phi_tm <- phi_tm_a + (phi_tm_b - phi_tm_b) / (1 + exp(-runif(1, min = -2, max = 2)))
+
+    }
+
 
     est_start  <- Sys.time()
     # this is where the first call to the cpp code occurs. It is for the random projections part of the algorithm.
@@ -468,7 +479,7 @@ stglmm <- function(fixed,
 
 
       samples_w[(k - 1)*iter + i,] <- current_w
-      samples_eta[(k - 1)*iter + i,] <- current_delta
+      samples_v[(k - 1)*iter + i,] <- current_v
 
       samples[i, k, c(beta_index, sigma2_sp_index, phi_sp_index, sigma2_tm_index, phi_tm_index)] <- c(current_beta, current_sigma2_sp, current_phi_sp, current_sigma2_tm, current_phi_tm) # stores fixed effects draw and variance and spatial range draw
       samples[i, k, delta_index] <- current_delta # stores draw for synthetic variable of spatial effects
@@ -533,8 +544,6 @@ stglmm <- function(fixed,
               p.params = samples[, , 1:nParams],
               model = "rrp/arrp",
               rank = rank,
-              eta.params = samples_eta,
-              w.params = samples_w,
               accepts = accept_s,
               acceptw = accept_w,
               samples = samples))
@@ -563,7 +572,7 @@ beta_log_full_conditional_st <- function(beta, current_w, current_v, X,
                                       dens_fun_log,
                                       n_t, n_s){
 
-  z <- X %*% beta + rep(current_w, times = n_t) + rep(current_v, times = n_s) # if rsr, current_w = L%*%eta
+  z <- X %*% beta + rep(current_w, times = n_t) + rep(current_v, each = n_s) # if rsr, current_w = L%*%eta
   lf <- sum(dens_fun_log(O, mean = z)) - crossprod(beta)/(p*beta.b)
   return(lf)
 
@@ -576,7 +585,7 @@ delta_log_full_conditional_st <- function(delta, xbeta,  U, d,
                                        current_sigma2_sp,
                                        dens_fun_log){ # delta is rank-m
   w = U %*% (sqrt(d)*delta)
-  z <- xbeta + rep(w, n_t) + rep(current_v, each = n_s)
+  z <- xbeta + rep(w, times = n_t) + rep(current_v, each = n_s)
   foo2 <- crossprod(delta,delta) # d = D^2 from random projection
   lf <- sum(dens_fun_log(O, mean = z)) - 1/(2*current_sigma2_sp) * foo2
   return(list(lr = lf, twKinvw = foo2, w = w))

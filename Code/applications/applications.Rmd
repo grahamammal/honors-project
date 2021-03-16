@@ -2,13 +2,110 @@
 title: "Applications"
 output: html_document
 ---
-
+## Load Libraries
 ```{r}
 library(rsrHonors)
 library(bayesplot)
+library(glue)
+library(purrr)
 ```
 
+## Spatial Only
 
+### Simulate Data 
+```{r}
+rmvn <- function(n, mu = 0, V = matrix(1)){
+  p <- length(mu)
+  if (any(is.na(match(dim(V), p))))
+    stop("Dimension problem!")
+  D <- chol(V)
+  t(matrix(rnorm(n*p), ncol = p) %*% D + rep(mu, rep(n, p)))
+}
+# simulate data
+set.seed(451)
+n_s <- 200
+
+
+nu <- 2.5
+sigma2_sp <- 1
+phi_sp <- 0.2
+tau2 <- 0.1
+
+x1 <- runif(n_s)
+x2 <- runif(n_s)
+x3 <- rnorm(n_s)
+x4 <- rnorm(n_s)
+x5 <- rnorm(n_s)
+
+ 
+locations <- data.frame(x1 = x1, x2 = x2)
+
+
+X <- cbind(x3, x4, x5)
+beta <- c(1,1,-2)
+
+
+d <- as.matrix(dist(data.frame(x1 = x1,
+                               x2 = x2)))
+matern_covariance <- sigma2_sp * (1 + sqrt(5)*d/phi_sp + 5*d^2 / (3*phi_sp^2)) * exp(-1*sqrt(5)*d/phi_sp)
+
+
+W <- rmvn(n = 1, mu = rep(0, n_s), V = matern_covariance)
+
+
+y_mean <- 1 + as.numeric(X %*% beta + W)
+
+y_pois <- rpois(n_s, exp(y_mean))
+y_norm <- rnorm(n_s, y_mean, sqrt(tau2))
+y_binom <- rbinom(n_s, 1, exp(y_mean)/(1 + exp(y_mean)))
+
+sim_data <- data.frame(x1 = x1, x2 = x2, x3 = x3,
+                       x4 = x4, x5 = x5,
+                       W = rep(W),
+                       y_mean = y_mean,
+                       y_pois = y_pois,
+                       y_norm = y_norm,
+                       y_binom = y_binom)
+
+```
+
+### Fit Model
+```{r}
+linmod <- glm(y_pois ~ x3 + x4 + x5, data = sim_data, family=poisson(link="log")) # find starting values
+
+
+simulated_sglmm <- poisson_model <- rrp_glm(
+        fixed = y_pois ~ x3 + x4 + x5,
+        spatial =  ~ x1 + x2,
+        data = sim_data,
+        family = poisson(),
+        covfn = NA,
+        iter = 10000,
+        chains = 2,
+        cores = 1,
+        param_start = list("beta" = linmod$coefficients,
+                           "s2" = 2,
+                           "phi" = 0.5),
+        priors = list("beta.normal" = 100, # variance of beta prior
+                      "s2.IG" = c(2,2), # inverse gamma params
+                      "phi.Unif" = c(0.01, 1.5)), # uniform prior on phi
+        tuning = list("beta" = c(sqrt(diag(vcov(linmod)))),
+                      "s2" = 0.1,
+                      "phi" = 0.01,
+                      "w" = 0.1),
+        nu = nu,
+        rank = 25)
+save(simulated_sglmm, file = "first_simulated_sglmm.RData")
+
+
+mcmc_trace(simulated_sglmm$samples, regex_pars = c("beta", "sigma2"))
+
+mcmc_trace(simulated_sglmm$samples, regex_pars = c("delta_[1-5]\\b"))
+```
+
+## Spatio-Temporal
+
+### Simulate Data
 Let's start by fitting a simple simulated data set. And this time we'll really tune it. 
 
 ```{r}
@@ -22,28 +119,29 @@ rmvn <- function(n, mu = 0, V = matrix(1)){
 # simulate data
 set.seed(451)
 n_s <- 200
-n_t <- 100
+n_t <- 50
 
 
 nu <- 2.5
 sigma2_sp <- 1
 sigma2_tm <- 1
-phi_sp <- 0.5
-phi_tm <- 0.5
+phi_sp <- 0.2
+phi_tm <- 0.2
 tau2 <- 0.1
 
-x0 <- rep(1, n_s * n_t)
 x1 <- rep(runif(n_s), times = n_t)
 x2 <- rep(runif(n_s), times = n_t)
 x3 <- rnorm(n_s*n_t)
+x4 <- rnorm(n_s*n_t)
+x5 <- rnorm(n_s*n_t)
 
 time <- 1:n_t / n_t
 
 locations <- data.frame(x1 = x1[1:n_s], x2 = x2[1:n_s])
 
 
-X <- cbind(x0, x1, x2, x3)
-beta <- c(0,1,1,-2)
+X <- cbind(x3, x4, x5)
+beta <- c(1,1,-2)
 
 
 d <- as.matrix(dist(data.frame(x1 = x1[1:n_s],
@@ -58,13 +156,14 @@ W <- rmvn(n = 1, mu = rep(0, n_s), V = matern_covariance)
 V <- rmvn(n = 1, mu = rep(0, n_t), V = exp_cov)
 
 
-y_mean <- as.numeric(X %*% beta + rep(W, times = n_t) + rep(V, each = n_s))
+y_mean <- 1 + as.numeric(X %*% beta + rep(W, times = n_t) + rep(V, each = n_s))
 
 y_pois <- rpois(n_s * n_t, exp(y_mean))
 y_norm <- rnorm(n_s * n_t, y_mean, sqrt(tau2))
 y_binom <- rbinom(n_s * n_t, 1, exp(y_mean)/(1 + exp(y_mean)))
 
 sim_data <- data.frame(x1 = x1, x2 = x2, x3 = x3,
+                       x4 = x4, x5 = x5,
                        W = rep(W, times = n_t),
                        V = rep(V, each = n_s),
                        y_mean = y_mean,
@@ -72,36 +171,60 @@ sim_data <- data.frame(x1 = x1, x2 = x2, x3 = x3,
                        y_norm = y_norm,
                        y_binom = y_binom)
 
+ K1 = rp(phi_sp,
+        d,
+          n_s,
+          50,
+          2.5,
+          as.integer(1),
+          cov_fun = 0) # C++ function for approximating eigenvectors
+ 
+  K.rp = list(d = K1[[1]],u = K1[[2]][,1:50])
+u <- K.rp$u[,1:50]
 ```
 
-
+### Fit Model
 ```{r}
+linmod <- glm(y_pois ~ x3 + x4 + x5, data = sim_data, family=poisson(link="log")) # find starting values
+
+
 simulated_stglmm <- stglmm(
-  fixed = y_pois ~ x1 + x2 + x3,
+  fixed = y_pois ~ x3 + x4 + x5,
   data = sim_data,
   locations = locations,
   times = time,
   family = poisson(),
   covfn = 2.5,
-  iter = 1000,
+  iter = 10000,
   chains = 2,
   cores = 1,
+  param_start = list("beta" = linmod$coefficients,
+                     "s2_sp" = 1,
+                     "phi_sp" = 0.5,
+                     "s2_tm" = 1,
+                     "phi_tm" = 0.5),
   priors = list("beta.normal" = 100, # variance of beta prior
                 "s2_sp_IG" = c(2,2), # inverse gamma params
                 "s2_tm_IG" = c(2,2),
-                "phi_sp_unif" = c(0.01, 1.5),
-                "phi_tm_unif" = c(0.01, 1.5)), # uniform prior on phi
-  tuning = list("beta" = c(0.1, apply(X[,2:4], 2, sd)),
-                "s2_sp" = 0.1,
-                "phi_sp" = 1,
-                "s2_tm" = 0.1,
+                "phi_sp_unif" = c(0.01, 1),
+                "phi_tm_unif" = c(0.01, 1)), # uniform prior on phi
+  tuning = list("beta" = 10*c(sqrt(diag(vcov(linmod)))),
+                "s2_sp" = 0.5,
+                "phi_sp" = 0.01,
+                "s2_tm" = 0.5,
                 "phi_tm" = 0.01,
                 "delta" = 0.1,
                 "alpha" = 0.1),
   nu = nu,
-  rank_sp = 10,
-  rank_tm = 5)
+  rank_sp = 50,
+  rank_tm = 25)
+
+save(simulated_stglmm, file = "first_simulated_stglmm.RData")
 ```
+
+
+### Display Diagnostics
+
 ```{r}
 simulated_stglmm$accepts
 mcmc_trace(simulated_stglmm$samples,
@@ -114,9 +237,160 @@ mcmc_trace(simulated_stglmm$samples,
            regex_pars = "phi.*" )
 
 mcmc_trace(simulated_stglmm$samples,
-           regex_pars = "delta.*" )
+           regex_pars = "delta_1" )
 
 mcmc_trace(simulated_stglmm$samples,
-           regex_pars = "alpha.*" )
+           regex_pars = "alpha_1" )
+
+mcmc_trace(simulated_stglmm$samples,
+           pars = c("delta_1", "delta_2", "delta_3", "delta_4"))
+mcmc_trace(simulated_stglmm$samples,
+           pars = c("alpha_1", "alpha_2", "alpha_3", "alpha_4"))
+```
+
+## Bird Data
+
+### Load Data
+
+
+```{r}
+house_finch <- read_csv("../../Data/house_finch.csv")
+carolina_wren <- read_csv("../../Data/carolina_wren.csv")
+```
+
+
+```{r}
+routes <- read_csv("../../Data/Routes/routes.csv", col_types = "dddcdddddddd")
+```
+
+```{r}
+house_finch_sp <- house_finch %>% 
+  left_join(routes, by = c("countrynum", "statenum", "Route"))
+
+carolina_wren_sp <- carolina_wren %>% 
+  left_join(routes, by = c("countrynum", "statenum", "Route")) %>% 
+  mutate(Stratum = as.character(Stratum))
+house_finch_sp %>% 
+  ggplot(aes(x = Year)) +
+  geom_histogram(binwidth = 1, boundary = 0)
+
+start = 1990
+end = 2010
+
+carolina_wren_sp %>% 
+  filter(Year >= start, Year <= end) %>% 
+  group_by(statenum, Route) %>% 
+  filter(n() == end - start + 1)
+
+```
+
+
+### Fit STGLMM
+
+```{r}
+model_data <- carolina_wren_sp %>% 
+  filter(Year >= start, Year <= end) %>% 
+  group_by(statenum, Route) %>% 
+  filter(n() == end - start + 1)
+
+linmod <- glm(SpeciesTotal ~ Stratum, data = model_data, family=poisson(link="log")) # find starting values
+
+locations <- data.frame(lat = model_data$Latitude, 
+                        long = model_data$Longitude) %>% 
+  distinct()
+
+bird_stglmm <- stglmm(
+  fixed = SpeciesTotal ~ Stratum,
+  data = model_data,
+  locations = locations,
+  times = unique(model_data$Year),
+  family = poisson(),
+  covfn = 2.5,
+  iter = 10000,
+  chains = 2,
+  cores = 1,
+  param_start = list("beta" = linmod$coefficients,
+                     "s2_sp" = 1,
+                     "phi_sp" = 0.5,
+                     "s2_tm" = 1,
+                     "phi_tm" = 0.5),
+  priors = list("beta.normal" = 100, # variance of beta prior
+                "s2_sp_IG" = c(2,2), # inverse gamma params
+                "s2_tm_IG" = c(2,2),
+                "phi_sp_unif" = c(0.01, 1.5),
+                "phi_tm_unif" = c(0.01, 1.5)), # uniform prior on phi
+  tuning = list("beta" = c(sqrt(diag(vcov(linmod))))/2,
+                "s2_sp" = 0.1,
+                "phi_sp" = 0.05,
+                "s2_tm" = 0.4,
+                "phi_tm" = 0.05,
+                "delta" = 0.05,
+                "alpha" = 0.05),
+  nu = nu,
+  rank_sp = 50,
+  rank_tm = 10)
+
+save(bird_stglmm, file = "bird_stglmm.RData")
+```
+
+```{r}
+bird_stglmm$acceptw
+
+bird_stglmm$accepts
+mcmc_trace(bird_stglmm$samples,
+           regex_pars = "beta_[0-5]\\b" )
+
+mcmc_trace(bird_stglmm$samples,
+           regex_pars = "sigma.*" )
+
+mcmc_trace(bird_stglmm$samples,
+           regex_pars = "phi.*" )
+
+mcmc_trace(bird_stglmm$samples,
+           regex_pars = "delta_1" )
+
+mcmc_trace(bird_stglmm$samples,
+           regex_pars = "alpha_1" )
+
+mcmc_trace(bird_stglmm$samples,
+           pars = c("delta_1", "delta_2", "delta_3", "delta_4"))
+mcmc_trace(bird_stglmm$samples,
+           pars = c("alpha_1", "alpha_2", "alpha_3", "alpha_4"))
+```
+
+```{r}
+model_data_index <- model_data %>% 
+  group_by(statenum, Route) %>% 
+  mutate(location_index = group_indices(),
+         time_index = 1:n())
+
+mcmc_dens_chains(bird_stglmm$samples, regex_pars = "beta_[0-3]\\b")
+model_data_minimal <- model_data_index %>% 
+  ungroup() %>% 
+  select(SpeciesTotal, location_index, Stratum, time_index)
+
+# beta for each observation
+as.numeric(as.factor(paste0("Stratum", model_data_minimal$Stratum)))
+```
+
+```{r}
+posterior_predictions <- as.vector(bird_stglmm$samples[,,"beta_0"] + bird_stglmm$samples[,,"beta_3"] + bird_stglmm$samples[,,glue("w_{1}")] + bird_stglmm$samples[,,glue("v_{1}")])
+
+
+predict_stglmm <- function(location_index, Stratum_index, time_index) {
+  as.vector(bird_stglmm$samples[,,"beta_0"] +
+              bird_stglmm$samples[,,glue("beta_{Stratum_index}")] +
+              bird_stglmm$samples[,,glue("w_{location_index}")] +
+              bird_stglmm$samples[,,glue("v_{time_index}")])
+}
+
+posterior_predictions <- as.matrix(pmap_dfc(list("location_index" = model_data_minimal$location_index,
+             "Stratum_index" = as.numeric(as.factor(paste0("Stratum", model_data_minimal$Stratum)))-1,
+             "time_index" = model_data_minimal$time_index),
+        predict_stglmm))
+
+
+
+ppc_dens_overlay(log(model_data_minimal$SpeciesTotal), posterior_predictions[(nrow(posterior_predictions)/2):nrow(posterior_predictions),])
 ```
 

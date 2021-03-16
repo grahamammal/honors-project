@@ -16,6 +16,7 @@ library(purrr)
 library(glue)
 library(sf)
 library(rnaturalearth)
+library(ggplot2)
 ```
 
 
