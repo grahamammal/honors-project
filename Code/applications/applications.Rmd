@@ -8,6 +8,13 @@ library(rsrHonors)
 library(bayesplot)
 library(glue)
 library(purrr)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(rstanarm)
+library(sf)
+library(patchwork)
+library(rnaturalearth)
 ```
 
 ## Spatial Only
@@ -261,6 +268,10 @@ carolina_wren <- read_csv("../../Data/carolina_wren.csv")
 
 ```{r}
 routes <- read_csv("../../Data/Routes/routes.csv", col_types = "dddcdddddddd")
+ne_10m <- st_read("../../Data/ne_50m_admin_1_states_provinces_lakes/ne_50m_admin_1_states_provinces_lakes.shp") %>% 
+  filter(gu_a3 == "USA") %>% 
+  st_transform(crs = 5070) %>% 
+  filter(!(name %in% c("Alaska", "Hawaii")))
 ```
 
 ```{r}
@@ -270,28 +281,85 @@ house_finch_sp <- house_finch %>%
 carolina_wren_sp <- carolina_wren %>% 
   left_join(routes, by = c("countrynum", "statenum", "Route")) %>% 
   mutate(Stratum = as.character(Stratum))
-house_finch_sp %>% 
+house_finch %>% 
   ggplot(aes(x = Year)) +
   geom_histogram(binwidth = 1, boundary = 0)
 
 start = 1990
 end = 2010
 
-carolina_wren_sp %>% 
+carolina_wren %>% 
   filter(Year >= start, Year <= end) %>% 
   group_by(statenum, Route) %>% 
   filter(n() == end - start + 1)
 
+house_finch_sp %>% 
+  filter(Year >= start, Year <= end) %>% 
+  group_by(statenum, Route) %>% 
+  filter(n() == end - start + 1)
+
+model_data <- carolina_wren_sp %>% 
+  filter(Year >= start, Year <= end) %>% 
+  group_by(statenum, Route) %>% 
+  filter(n() == end - start + 1) %>% 
+  ungroup()
+```
+
+### Map Data
+
+```{r}
+
+(map_1990 <- model_data %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>% 
+  filter(Year == 1990) %>% 
+  ggplot() +
+  geom_sf(aes(size = SpeciesTotal,
+              color = SpeciesTotal), 
+          alpha = 0.3) +
+  scale_color_viridis_c()+
+  scale_size(range = c(0.5, 10)) +
+  theme_minimal())
+
+(map_2010 <- model_data %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform(crs = 5070) %>% 
+  filter(Year == 2010) %>% 
+  ggplot() +
+  geom_sf(data = ne_10m, fill = NA) +
+  geom_sf(aes(size = SpeciesTotal,
+              color = SpeciesTotal), 
+          alpha = 0.3) +
+  scale_color_viridis_c()+
+  scale_size(range = c(0.5, 10)) +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank()))
+```
+
+### Fit GLM
+
+```{r}
+bird_glm <- stan_glm(SpeciesTotal ~ Stratum, 
+         data = model_data, 
+         family = poisson(), iter = 10000, chains = 2)
+```
+
+#### Evaluate Chains
+
+```{r}
+mcmc_trace(bird_glm)
+```
+
+```{r}
+bird_glm_predictions <- posterior_predict(bird_glm)
+
+ppc_dens_overlay(model_data$SpeciesTotal, bird_glm_predictions)
 ```
 
 
 ### Fit STGLMM
 
 ```{r}
-model_data <- carolina_wren_sp %>% 
-  filter(Year >= start, Year <= end) %>% 
-  group_by(statenum, Route) %>% 
-  filter(n() == end - start + 1)
 
 linmod <- glm(SpeciesTotal ~ Stratum, data = model_data, family=poisson(link="log")) # find starting values
 
@@ -333,7 +401,12 @@ bird_stglmm <- stglmm(
 save(bird_stglmm, file = "bird_stglmm.RData")
 ```
 
+#### Evaluate Chains
+
+
 ```{r}
+load("bird_stglmm.RData")
+
 bird_stglmm$acceptw
 
 bird_stglmm$accepts
@@ -364,14 +437,15 @@ model_data_index <- model_data %>%
   mutate(location_index = group_indices(),
          time_index = 1:n())
 
-mcmc_dens_chains(bird_stglmm$samples, regex_pars = "beta_[0-3]\\b")
 model_data_minimal <- model_data_index %>% 
   ungroup() %>% 
   select(SpeciesTotal, location_index, Stratum, time_index)
 
 # beta for each observation
-as.numeric(as.factor(paste0("Stratum", model_data_minimal$Stratum)))
 ```
+
+#### Evaluate Results
+
 
 ```{r}
 posterior_predictions <- as.vector(bird_stglmm$samples[,,"beta_0"] + bird_stglmm$samples[,,"beta_3"] + bird_stglmm$samples[,,glue("w_{1}")] + bird_stglmm$samples[,,glue("v_{1}")])
@@ -391,6 +465,7 @@ posterior_predictions <- as.matrix(pmap_dfc(list("location_index" = model_data_m
 
 
 
-ppc_dens_overlay(log(model_data_minimal$SpeciesTotal), posterior_predictions[(nrow(posterior_predictions)/2):nrow(posterior_predictions),])
+ppc_dens_overlay(model_data$SpeciesTotal, exp(posterior_predictions[(nrow(posterior_predictions)/2):nrow(posterior_predictions),])) +
+  lims(x = c(0, 150))
 ```
 
