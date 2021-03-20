@@ -312,28 +312,49 @@ model_data <- carolina_wren_sp %>%
 (map_1990 <- model_data %>% 
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>% 
   filter(Year == 1990) %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform(crs = 5070) %>%
   ggplot() +
+  geom_sf(data = ne_10m, fill = NA, color = "gray40") +
   geom_sf(aes(size = SpeciesTotal,
               color = SpeciesTotal), 
-          alpha = 0.3) +
-  scale_color_viridis_c()+
-  scale_size(range = c(0.5, 10)) +
-  theme_minimal())
+          alpha = 0.5) +
+  scale_color_viridis_c(breaks = c(25, 75, 125), 
+                        limits = c(0, 150), alpha = 0.8) +
+  scale_size(range = c(0.5, 10), 
+             breaks = c(25, 75, 125), 
+             limits = c(0, 150),
+             guide = guide_legend(reverse = TRUE)) +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank()) +
+  labs(color = "Observed Birds",
+       size = "Observed Birds"))
 
 (map_2010 <- model_data %>% 
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
   st_transform(crs = 5070) %>% 
   filter(Year == 2010) %>% 
   ggplot() +
-  geom_sf(data = ne_10m, fill = NA) +
+  geom_sf(data = ne_10m, fill = NA, color = "gray40") +
   geom_sf(aes(size = SpeciesTotal,
               color = SpeciesTotal), 
-          alpha = 0.3) +
-  scale_color_viridis_c()+
-  scale_size(range = c(0.5, 10)) +
+          alpha = 0.5) +
+  scale_color_viridis_c(breaks = c(25, 75, 125), 
+                        limits = c(0, 150), alpha = 0.8) +
+  scale_size(range = c(0.5, 10), 
+             breaks = c(25, 75, 125), 
+             limits = c(0, 150),
+             guide = guide_legend(reverse = TRUE)) +
   theme_minimal() +
   theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank()))
+        axis.text.y = element_blank()) +
+  labs(color = "Observed Birds",
+       size = "Observed Birds"))
+
+ggsave("figures/03-19_map-1990.png", map_1990, width = 8, height = 6)
+ggsave("figures/03-19_map-2010.png", map_2010, width = 8, height = 6)
+
 ```
 
 ### Fit GLM
