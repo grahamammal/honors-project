@@ -21,6 +21,7 @@
 #' @param nu a parameter for the Matern covariance function, is always 2.5 right now
 #' @param rank_sp the rank of the approximation of the spatial covariance matrix
 #' @param rank_tm the rank of the approximation of the temporal covariance matrix
+#' @param dist_metric the distance metric to use when calculating distance between spatial locations. Either "euclidean" for euclidean distance or "globe" for distance based on latitude and longitude over the globe.
 #' @return A list containing all of the info you need
 #' @examples
 #' \dontrun{
@@ -65,7 +66,8 @@ stglmm <- function(fixed,
                    tuning,
                    nu, # keep 2.5 for now
                    rank_sp,
-                   rank_tm){ # rank to reduce spatial matrix to
+                   rank_tm,
+                   dist_metric = "euclidean"){ # rank to reduce spatial matrix to
 
   start_time <- Sys.time()
   # Figure out how to interpret the formula fixed fixed
@@ -93,8 +95,9 @@ stglmm <- function(fixed,
     locations = as.matrix(locations)
   }
 
-
   dist_space <- as.matrix(dist(locations))
+
+
   dist_time <- as.matrix(dist(times))
 
 

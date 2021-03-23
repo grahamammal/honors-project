@@ -3,7 +3,7 @@ title: "Applications"
 output: html_document
 ---
 ## Load Libraries
-```{r}
+```{r setup, include=FALSE}
 library(rsrHonors)
 library(bayesplot)
 library(glue)
@@ -15,6 +15,7 @@ library(rstanarm)
 library(sf)
 library(patchwork)
 library(rnaturalearth)
+library(latex2exp)
 ```
 
 ## Spatial Only
@@ -355,14 +356,40 @@ model_data <- carolina_wren_sp %>%
 ggsave("figures/03-19_map-1990.png", map_1990, width = 8, height = 6)
 ggsave("figures/03-19_map-2010.png", map_2010, width = 8, height = 6)
 
+
+(map_1991 <- model_data %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform(crs = 5070) %>% 
+  filter(Year == 1991) %>% 
+  ggplot() +
+  geom_sf(data = ne_10m, fill = NA, color = "gray40") +
+  geom_sf(aes(size = SpeciesTotal,
+              color = SpeciesTotal), 
+          alpha = 0.5) +
+  scale_color_viridis_c(breaks = c(25, 75, 125), 
+                        limits = c(0, 150), alpha = 0.8) +
+  scale_size(range = c(0.5, 10), 
+             breaks = c(25, 75, 125), 
+             limits = c(0, 150),
+             guide = guide_legend(reverse = TRUE)) +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank()) +
+  labs(color = "Observed Birds",
+       size = "Observed Birds"))
+ggsave("figures/03-19_map-1991.png", map_2010, width = 8, height = 6)
+
 ```
 
 ### Fit GLM
 
 ```{r}
+set.seed(451)
 bird_glm <- stan_glm(SpeciesTotal ~ Stratum, 
          data = model_data, 
          family = poisson(), iter = 10000, chains = 2)
+
+save(bird_glm, "bird_glm.RData")
 ```
 
 #### Evaluate Chains
@@ -374,14 +401,36 @@ mcmc_trace(bird_glm)
 ```{r}
 bird_glm_predictions <- posterior_predict(bird_glm)
 
-ppc_dens_overlay(model_data$SpeciesTotal, bird_glm_predictions)
+bird_glm_ppc <- ppc_dens_overlay(model_data$SpeciesTotal, bird_glm_predictions)
+
+bird_glm_ppc
+
+save(bird_glm, file = "bird_glm.Rdata")
+
+ggsave("figures/3-19_bird-glm-ppc.png", bird_glm_ppc, width = 8, height = 6)
+```
+
+Look at variable distributions of Stratum3: 
+Coastal Flatwoods (15 locations, 21 years = 315 observations)
+```{r}
+bird_glm
+
+bird_glm_stratum3 <- bird_glm %>% 
+  mcmc_areas(pars = "Stratum3", 
+             prob = 0.95, 
+             point_est = "median") +
+  theme_minimal() +
+  theme(axis.text.y = element_blank())
+
+ggsave("figures/3-20_bird-glm-stratum3.png", bird_glm_stratum3, width = 8, height = 6)
+
 ```
 
 
 ### Fit STGLMM
 
 ```{r}
-
+set.seed(451)
 linmod <- glm(SpeciesTotal ~ Stratum, data = model_data, family=poisson(link="log")) # find starting values
 
 locations <- data.frame(lat = model_data$Latitude, 
@@ -415,7 +464,7 @@ bird_stglmm <- stglmm(
                 "phi_tm" = 0.05,
                 "delta" = 0.05,
                 "alpha" = 0.05),
-  nu = nu,
+  nu = 2.5,
   rank_sp = 50,
   rank_tm = 10)
 
@@ -473,10 +522,10 @@ posterior_predictions <- as.vector(bird_stglmm$samples[,,"beta_0"] + bird_stglmm
 
 
 predict_stglmm <- function(location_index, Stratum_index, time_index) {
-  as.vector(bird_stglmm$samples[,,"beta_0"] +
-              bird_stglmm$samples[,,glue("beta_{Stratum_index}")] +
-              bird_stglmm$samples[,,glue("w_{location_index}")] +
-              bird_stglmm$samples[,,glue("v_{time_index}")])
+  as.vector(bird_stglmm$samples[5001:10000,,"beta_0"] +
+              bird_stglmm$samples[5001:10000,,glue("beta_{Stratum_index}")] +
+              bird_stglmm$samples[5001:10000,,glue("w_{location_index}")] +
+              bird_stglmm$samples[5001:10000,,glue("v_{time_index}")])
 }
 
 posterior_predictions <- as.matrix(pmap_dfc(list("location_index" = model_data_minimal$location_index,
@@ -486,7 +535,38 @@ posterior_predictions <- as.matrix(pmap_dfc(list("location_index" = model_data_m
 
 
 
-ppc_dens_overlay(model_data$SpeciesTotal, exp(posterior_predictions[(nrow(posterior_predictions)/2):nrow(posterior_predictions),])) +
-  lims(x = c(0, 150))
+bird_stglmm_ppc <- ppc_dens_overlay(model_data$SpeciesTotal, exp(posterior_predictions[(nrow(posterior_predictions)/2):nrow(posterior_predictions),])) +
+  lims(x = c(0, 150)) +
+  theme_minimal()
+
+bird_stglmm_ppc
+
+ggsave("figures/3-19_bird-stglmm-ppc.png", bird_stglmm_ppc, width = 8, height = 6)
+```
+
+Lets look at Stratum3 for this version too
+```{r}
+stratum3_estimates <- as.vector(bird_stglmm$samples[5001:10000,,"beta_11"]) %>% 
+  cbind(as.matrix(bird_glm)[, "Stratum3"])
+colnames(stratum3_estimates) <- c("bird_stglmm", "bird_glm")
+
+(stratum3_plot <- stratum3_estimates %>% 
+  mcmc_areas(pars = c("bird_stglmm", "bird_glm"), 
+             prob = 0.95, 
+             point_est = "median") +
+  theme_minimal() +
+  scale_y_discrete(labels = c("STGLMM", "GLM")))
+ggsave("figures/3-20_bird-stratum3.png", stratum3_plot, width = 8, height = 6)
+```
+
+```{r}
+cor_var_plot <- bird_stglmm$samples[5001:10000,,] %>% 
+  mcmc_areas(pars = c("sigma2_sp", "sigma2_tm"),
+             prob = 0.95) +
+  scale_y_discrete(labels = unname(TeX(c("$\\sigma^2$", "$\\theta^2")))) +
+  theme_minimal()
+
+ggsave("figures/3-20_cor_var_plot.png", cor_var_plot, width = 8, height = 6)
+
 ```
 
