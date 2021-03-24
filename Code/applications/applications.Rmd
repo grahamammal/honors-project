@@ -196,6 +196,7 @@ simulated_glm_negbin %>%
   mcmc_trace()
 
 simulated_glm_negbin_predictions <- posterior_predict(simulated_glm_negbin)
+mcmc_trace(simulated_glm_negbin)
 (sim_glm_negbin_ppc <- ppc_dens_overlay(sim_data$y_pois, simulated_glm_negbin_predictions) +
   lims(x = c(0, 50)))
 
@@ -206,6 +207,8 @@ ggsave("figures/3-24_sim-glm-negbin-ppc.png", sim_glm_negbin_ppc, width = 8, hei
 
 ### Fit STGLMM
 ```{r}
+linmod_nb <- glm.nb(y_pois ~ x3 + x4 + x5, data = sim_data)
+
 linmod <- glm(y_pois ~ x3 + x4 + x5, data = sim_data, family=poisson(link="log")) # find starting values
 
 
