@@ -14,11 +14,13 @@ stglmm(
   iter,
   chains,
   cores,
+  param_start = NULL,
   priors,
   tuning,
   nu,
   rank_sp,
-  rank_tm
+  rank_tm,
+  dist_metric = "euclidean"
 )
 }
 \arguments{
@@ -51,6 +53,8 @@ the family function corresponding to one of these.}
 \item{rank_sp}{the rank of the approximation of the spatial covariance matrix}
 
 \item{rank_tm}{the rank of the approximation of the temporal covariance matrix}
+
+\item{dist_metric}{the distance metric to use when calculating distance between spatial locations. Either "euclidean" for euclidean distance or "globe" for distance based on latitude and longitude over the globe.}
 }
 \value{
 A list containing all of the info you need

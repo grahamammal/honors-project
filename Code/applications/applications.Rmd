@@ -16,19 +16,14 @@ library(sf)
 library(patchwork)
 library(rnaturalearth)
 library(latex2exp)
+library(MASS)
 ```
 
 ## Spatial Only
 
 ### Simulate Data 
 ```{r}
-rmvn <- function(n, mu = 0, V = matrix(1)){
-  p <- length(mu)
-  if (any(is.na(match(dim(V), p))))
-    stop("Dimension problem!")
-  D <- chol(V)
-  t(matrix(rnorm(n*p), ncol = p) %*% D + rep(mu, rep(n, p)))
-}
+
 # simulate data
 set.seed(451)
 n_s <- 200
@@ -58,7 +53,7 @@ d <- as.matrix(dist(data.frame(x1 = x1,
 matern_covariance <- sigma2_sp * (1 + sqrt(5)*d/phi_sp + 5*d^2 / (3*phi_sp^2)) * exp(-1*sqrt(5)*d/phi_sp)
 
 
-W <- rmvn(n = 1, mu = rep(0, n_s), V = matern_covariance)
+W <- mvrnorm(n = 1, mu = rep(0, n_s), matern_covariance)
 
 
 y_mean <- 1 + as.numeric(X %*% beta + W)
@@ -117,21 +112,14 @@ mcmc_trace(simulated_sglmm$samples, regex_pars = c("delta_[1-5]\\b"))
 Let's start by fitting a simple simulated data set. And this time we'll really tune it. 
 
 ```{r}
-rmvn <- function(n, mu = 0, V = matrix(1)){
-  p <- length(mu)
-  if (any(is.na(match(dim(V), p))))
-    stop("Dimension problem!")
-  D <- chol(V)
-  t(matrix(rnorm(n*p), ncol = p) %*% D + rep(mu, rep(n, p)))
-}
 # simulate data
 set.seed(451)
-n_s <- 200
+n_s <- 100
 n_t <- 50
 
 
 nu <- 2.5
-sigma2_sp <- 1
+sigma2_sp <- 3
 sigma2_tm <- 1
 phi_sp <- 0.2
 phi_tm <- 0.2
@@ -139,9 +127,9 @@ tau2 <- 0.1
 
 x1 <- rep(runif(n_s), times = n_t)
 x2 <- rep(runif(n_s), times = n_t)
-x3 <- rnorm(n_s*n_t)
-x4 <- rnorm(n_s*n_t)
-x5 <- rnorm(n_s*n_t)
+x3 <- rnorm(n_s*n_t, sd = 0.05)
+x4 <- rnorm(n_s*n_t, sd = 0.05)
+x5 <- rnorm(n_s*n_t, sd = 0.05)
 
 time <- 1:n_t / n_t
 
@@ -149,7 +137,7 @@ locations <- data.frame(x1 = x1[1:n_s], x2 = x2[1:n_s])
 
 
 X <- cbind(x3, x4, x5)
-beta <- c(1,1,-2)
+beta <- c(1,1,-1)
 
 
 d <- as.matrix(dist(data.frame(x1 = x1[1:n_s],
@@ -157,11 +145,10 @@ d <- as.matrix(dist(data.frame(x1 = x1[1:n_s],
 matern_covariance <- sigma2_sp * (1 + sqrt(5)*d/phi_sp + 5*d^2 / (3*phi_sp^2)) * exp(-1*sqrt(5)*d/phi_sp)
 
 h <- as.matrix(dist(time))
-exp_cov <- sigma2_tm * exp(-h/phi_tm)
+exp_cov <- sigma2_tm * exp(-(h/phi_tm)^2)
 
-
-W <- rmvn(n = 1, mu = rep(0, n_s), V = matern_covariance)
-V <- rmvn(n = 1, mu = rep(0, n_t), V = exp_cov)
+W <- mvrnorm(1, rep(0, n_s), matern_covariance)
+V <- mvrnorm(1, rep(0, n_t), exp_cov)
 
 
 y_mean <- 1 + as.numeric(X %*% beta + rep(W, times = n_t) + rep(V, each = n_s))
@@ -179,19 +166,45 @@ sim_data <- data.frame(x1 = x1, x2 = x2, x3 = x3,
                        y_norm = y_norm,
                        y_binom = y_binom)
 
- K1 = rp(phi_sp,
-        d,
-          n_s,
-          50,
-          2.5,
-          as.integer(1),
-          cov_fun = 0) # C++ function for approximating eigenvectors
- 
-  K.rp = list(d = K1[[1]],u = K1[[2]][,1:50])
-u <- K.rp$u[,1:50]
 ```
 
-### Fit Model
+### Fit GLM
+
+```{r}
+set.seed(451)
+simulated_glm_pois <- stan_glm(y_pois ~ x3 + x4 + x5, 
+         data = sim_data, 
+         family = poisson(), iter = 5000, chains = 2)
+save(simulated_glm_pois, file = "simulated_glm_pois-3_24_12_54.RData")
+
+simulated_glm_negbin <- stan_glm(y_pois ~ x3 + x4 + x5, 
+         data = sim_data, 
+         family = neg_binomial_2(), iter = 5000, chains = 2)
+save(simulated_glm_negbin, file = "simulated_glm-negbin-3_24_12_54.RData")
+```
+
+```{r}
+simulated_glm_pois %>% 
+  mcmc_trace()
+
+simulated_glm_pois_predictions <- posterior_predict(simulated_glm_pois)
+(sim_glm_pois_ppc <- ppc_dens_overlay(sim_data$y_pois, simulated_glm_pois_predictions) +
+  lims(x = c(0, 50)))
+
+ggsave("figures/3-24_sim-glm-pois-ppc.png", sim_glm_pois_ppc, width = 8, height = 6)
+simulated_glm_negbin %>% 
+  mcmc_trace()
+
+simulated_glm_negbin_predictions <- posterior_predict(simulated_glm_negbin)
+(sim_glm_negbin_ppc <- ppc_dens_overlay(sim_data$y_pois, simulated_glm_negbin_predictions) +
+  lims(x = c(0, 50)))
+
+ggsave("figures/3-24_sim-glm-negbin-ppc.png", sim_glm_negbin_ppc, width = 8, height = 6)
+```
+
+
+
+### Fit STGLMM
 ```{r}
 linmod <- glm(y_pois ~ x3 + x4 + x5, data = sim_data, family=poisson(link="log")) # find starting values
 
@@ -203,11 +216,11 @@ simulated_stglmm <- stglmm(
   times = time,
   family = poisson(),
   covfn = 2.5,
-  iter = 10000,
+  iter = 50000,
   chains = 2,
   cores = 1,
   param_start = list("beta" = linmod$coefficients,
-                     "s2_sp" = 1,
+                     "s2_sp" = 3,
                      "phi_sp" = 0.5,
                      "s2_tm" = 1,
                      "phi_tm" = 0.5),
@@ -216,22 +229,26 @@ simulated_stglmm <- stglmm(
                 "s2_tm_IG" = c(2,2),
                 "phi_sp_unif" = c(0.01, 1),
                 "phi_tm_unif" = c(0.01, 1)), # uniform prior on phi
-  tuning = list("beta" = 10*c(sqrt(diag(vcov(linmod)))),
-                "s2_sp" = 0.5,
-                "phi_sp" = 0.01,
-                "s2_tm" = 0.5,
+  tuning = list("beta" = c(0.03, sqrt(diag(vcov(linmod)))[2:4]),
+                "s2_sp" = 1.5,
+                "phi_sp" = 0.02,
+                "s2_tm" = 1.5,
                 "phi_tm" = 0.01,
-                "delta" = 0.1,
-                "alpha" = 0.1),
+                "delta" = 0.03,
+                "alpha" = 0.02),
   nu = nu,
   rank_sp = 50,
-  rank_tm = 25)
+  rank_tm = 10)
 
-save(simulated_stglmm, file = "first_simulated_stglmm.RData")
+save(simulated_stglmm, file = "simulated_stglmm-3_24_10_54.RData")
+```
+
+```{r}
+load("simulated_stglmm-3_23_11_54.RData")
 ```
 
 
-### Display Diagnostics
+#### Display Diagnostics
 
 ```{r}
 simulated_stglmm$accepts
@@ -255,6 +272,40 @@ mcmc_trace(simulated_stglmm$samples,
 mcmc_trace(simulated_stglmm$samples,
            pars = c("alpha_1", "alpha_2", "alpha_3", "alpha_4"))
 ```
+
+Simulation study has a different meaning, do it for 1000 times or so and check for each of those 1 thousand. 
+
+#### Check Predictions
+
+```{r}
+
+predict_stglmm_sim <- function(location_index, time_index, x3, x4, x5) {
+  mean_vals <- as.numeric(simulated_stglmm$samples[(nrow(simulated_stglmm$samples) - 5000):nrow(simulated_stglmm$samples),,"beta_0"] +
+              simulated_stglmm$samples[(nrow(simulated_stglmm$samples) - 5000):nrow(simulated_stglmm$samples),,"beta_1"] * x3 +
+              simulated_stglmm$samples[(nrow(simulated_stglmm$samples) - 5000):nrow(simulated_stglmm$samples),,"beta_2"] * x4 +
+              simulated_stglmm$samples[(nrow(simulated_stglmm$samples) - 5000):nrow(simulated_stglmm$samples),,"beta_3"] * x5 +
+
+              simulated_stglmm$samples[(nrow(simulated_stglmm$samples) - 5000):nrow(simulated_stglmm$samples),,glue("w_{location_index}")] +
+              simulated_stglmm$samples[(nrow(simulated_stglmm$samples) - 5000):nrow(simulated_stglmm$samples),,glue("v_{time_index}")])
+  rpois(length(mean_vals), exp(mean_vals))
+}
+
+
+
+posterior_predictions_sim <- as.matrix(pmap_dfc(list("location_index" = rep(1:n_s, times = n_t),
+             "time_index" = rep(1:n_t, each = n_s),
+             "x3" = sim_data$x3,
+             "x4" = sim_data$x4,
+             "x5" = sim_data$x5),
+        predict_stglmm_sim))
+
+sim_stglmm_ppc <- ppc_dens_overlay(sim_data$y_pois, posterior_predictions_sim) +
+  xlim(0, 50)
+
+ggsave("figures/3-24_sim-stglmm-ppc.png", sim_stglmm_ppc, width = 8, height = 6)
+
+```
+
 
 ## Bird Data
 
@@ -391,10 +442,15 @@ bird_glm <- stan_glm(SpeciesTotal ~ Stratum,
 
 save(bird_glm, "bird_glm.RData")
 ```
+```{r}
+load("bird_glm.RData")
+```
+
 
 #### Evaluate Chains
 
 ```{r}
+
 mcmc_trace(bird_glm)
 ```
 
@@ -509,7 +565,7 @@ model_data_index <- model_data %>%
 
 model_data_minimal <- model_data_index %>% 
   ungroup() %>% 
-  select(SpeciesTotal, location_index, Stratum, time_index)
+  dplyr::select(SpeciesTotal, location_index, Stratum, time_index)
 
 # beta for each observation
 ```
@@ -522,10 +578,12 @@ posterior_predictions <- as.vector(bird_stglmm$samples[,,"beta_0"] + bird_stglmm
 
 
 predict_stglmm <- function(location_index, Stratum_index, time_index) {
-  as.vector(bird_stglmm$samples[5001:10000,,"beta_0"] +
+  mean_pred <- as.vector(bird_stglmm$samples[5001:10000,,"beta_0"] +
               bird_stglmm$samples[5001:10000,,glue("beta_{Stratum_index}")] +
               bird_stglmm$samples[5001:10000,,glue("w_{location_index}")] +
               bird_stglmm$samples[5001:10000,,glue("v_{time_index}")])
+  
+  rpois(length(mean_pred), exp(mean_pred))
 }
 
 posterior_predictions <- as.matrix(pmap_dfc(list("location_index" = model_data_minimal$location_index,
@@ -535,13 +593,13 @@ posterior_predictions <- as.matrix(pmap_dfc(list("location_index" = model_data_m
 
 
 
-bird_stglmm_ppc <- ppc_dens_overlay(model_data$SpeciesTotal, exp(posterior_predictions[(nrow(posterior_predictions)/2):nrow(posterior_predictions),])) +
+bird_stglmm_ppc <- ppc_dens_overlay(model_data$SpeciesTotal, posterior_predictions) +
   lims(x = c(0, 150)) +
   theme_minimal()
 
 bird_stglmm_ppc
 
-ggsave("figures/3-19_bird-stglmm-ppc.png", bird_stglmm_ppc, width = 8, height = 6)
+ggsave("figures/3-23_bird-stglmm-ppc.png", bird_stglmm_ppc, width = 8, height = 6)
 ```
 
 Lets look at Stratum3 for this version too

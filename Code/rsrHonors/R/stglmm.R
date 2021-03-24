@@ -200,7 +200,7 @@ stglmm <- function(fixed,
   # for acceptance rate
   accept_s <- matrix(NA, ncol = nParams, nrow = chains)
   accept_w <- matrix(NA, ncol = rank_sp, nrow = chains)
-
+  accept_v <- matrix(NA, ncol = rank_tm, nrow = chains)
 
 
   ##### start MCMC loop #####
@@ -497,12 +497,14 @@ stglmm <- function(fixed,
 
     accept_s[k,] <- sAccepts/(iter)
     accept_w[k,] <- wAccepts/(iter)
+    accept_v[k,] <- vAccepts/(iter)
 
   }
 
 
   accept_s <- apply(accept_s,2,mean)
   accept_w <- apply(accept_w,2,mean)
+  accept_v <- apply(accept_v, 2, mean)
 
   stop_time <- Sys.time()
 
@@ -549,6 +551,7 @@ stglmm <- function(fixed,
               rank = rank,
               accepts = accept_s,
               acceptw = accept_w,
+              acceptv = accept_v,
               samples = samples))
 }
 
