@@ -1,4 +1,5 @@
 library(purrr)
+library(dplyr)
 library(tidyr)
 library(glue)
 library(rstanarm)
@@ -9,7 +10,7 @@ library(MASS)
 set.seed(451)
 
 
-for(i in 1:2) {
+for(i in 1:5) {
   ##############################################
   # Simulate Data
   ##############################################
@@ -74,7 +75,7 @@ for(i in 1:2) {
   my_start_time_stan <- Sys.time()
   simulated_glm_negbin <- stan_glm(y_pois ~ x3 + x4 + x5,
                                    data = sim_data,
-                                   family = neg_binomial_2(), iter = 5000, chains = 2)
+                                   family = neg_binomial_2(), iter = 30, chains = 2)
   my_end_time_stan <- Sys.time()
   simulated_glm_negbin_draws <- as.matrix(simulated_glm_negbin)
 
@@ -98,7 +99,7 @@ for(i in 1:2) {
     times = time,
     family = poisson(),
     covfn = 2.5,
-    iter = 30000,
+    iter = 30,
     chains = 2,
     cores = 1,
     param_start = list("beta" = linmod$coefficients,
@@ -137,7 +138,5 @@ for(i in 1:2) {
                         "phi_sp", "phi_tm"))
 
 
-  i = 1
   write.csv(stglmm_params_quantiles, glue("simulations/stglmm_params_quantiles_{i}.csv"))
-
 }

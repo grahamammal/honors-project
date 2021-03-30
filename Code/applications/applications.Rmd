@@ -17,6 +17,10 @@ library(patchwork)
 library(rnaturalearth)
 library(latex2exp)
 library(MASS)
+library(ggridges)
+library(wesanderson)
+library(grid)
+library(forcats)
 ```
 
 ## Spatial Only
@@ -119,7 +123,7 @@ n_t <- 50
 
 
 nu <- 2.5
-sigma2_sp <- 3
+sigma2_sp <- 1
 sigma2_tm <- 1
 phi_sp <- 0.2
 phi_tm <- 0.2
@@ -307,6 +311,160 @@ sim_stglmm_ppc <- ppc_dens_overlay(sim_data$y_pois, posterior_predictions_sim) +
 
 ggsave("figures/3-24_sim-stglmm-ppc.png", sim_stglmm_ppc, width = 8, height = 6)
 
+```
+
+
+## Simulation Coverage
+
+Load the data
+
+```{r}
+load("simulations/simulations_phi_0.2.RData")
+sim_phi_0_2 <- sim_runs
+load("simulations/simulations_phi_0.5.RData")
+sim_phi_0_5 <- sim_runs
+load("simulations/simulations_phi_1.RData")
+sim_phi_1_0 <- sim_runs
+```
+
+### Phi = 0.2
+
+```{r}
+sim_phi_0_2_draws <- sim_phi_0_2 %>% 
+  map_depth(1, bind_rows, .id = "model") %>% 
+  bind_rows(.id = "run") %>% 
+  rename(quant_05 = "5%",
+         quant_25 = "25%",
+         quant_50 = "50%",
+         quant_75 = "75%",
+         quant_95 = "95%") %>% 
+  mutate(variable = variable) %>% 
+  mutate(variable_tex = factor(variable, levels = c("beta_0",  
+                                                    "beta_1",
+                                                    "beta_2", 
+                                                    "beta_3",
+                                                    "phi_sp",
+                                                    "phi_tm",
+                                                    "sigma2_sp",
+                                                    "sigma2_tm"),
+                               labels = c(TeX("$\\beta_0$"),
+                                          TeX("$\\beta_1$"),
+                                          TeX("$\\beta_2$"),
+                                          TeX("$\\beta_3$"),
+                                          TeX("$\\phi$"),
+                                          TeX("$\\psi$"),
+                                          TeX("$\\sigma^2$"),
+                                          TeX("$\\theta^2$"))))
+
+sim_phi_0_5_draws <- sim_phi_0_5 %>% 
+  map_depth(1, bind_rows, .id = "model") %>% 
+  bind_rows(.id = "run") %>% 
+  rename(quant_05 = "5%",
+         quant_25 = "25%",
+         quant_50 = "50%",
+         quant_75 = "75%",
+         quant_95 = "95%")
+
+sim_phi_1_0_draws <- sim_phi_1_0 %>% 
+  map_depth(1, bind_rows, .id = "model") %>% 
+  bind_rows(.id = "run") %>% 
+  rename(quant_05 = "5%",
+         quant_25 = "25%",
+         quant_50 = "50%",
+         quant_75 = "75%",
+         quant_95 = "95%")
+```
+
+
+```{r}
+darjeeling <- wes_palette("Darjeeling2", type = "discrete", n = 4)
+darjeeling <- c(darjeeling[1], darjeeling[4]) 
+
+
+vline_data = tibble(xintercept = c(1,1,1,-1, 1, 1,0.2, 0.2),
+                    variable_tex = unique(sim_phi_0_2_draws$variable_tex))
+sim_phi_0_2_draws %>% 
+  filter(as.integer(variable_tex) <= 4) %>% 
+  ggplot(aes(y = model)) +
+  geom_density_ridges(aes(x = quant_50, fill = model), 
+                      color = "grey22") +
+  theme_minimal() +
+  facet_wrap(~variable_tex, ncol = 2, scales = "free_x",
+             labeller = label_parsed) +
+  scale_y_discrete(labels = c("GLM", "STGLMM")) +
+  theme(legend.position = "none") +
+  scale_fill_manual(values = darjeeling) +
+  geom_vline(data = filter(vline_data, as.integer(variable_tex) <= 4),
+             aes(xintercept = xintercept)) +
+  labs(y = NULL,
+       x = "Point Estimate (Median)")
+
+sim_phi_0_2_draws %>% 
+  filter(as.integer(variable_tex) > 4) %>% 
+  ggplot() +
+  geom_density(aes(x = quant_50), 
+               color = "grey22",
+               fill = darjeeling[2]) +
+  theme_minimal() +
+  facet_wrap(~variable_tex, ncol = 2, scales = "free",
+             labeller = label_parsed) +
+  theme(legend.position = "none") +
+  geom_vline(data = filter(vline_data, as.integer(variable_tex) > 4),
+             aes(xintercept = xintercept)) +
+  labs(y = NULL,
+       x = "Point Estimate (Median)")
+```
+
+```{r}
+plot_quantiles <- function(n, truth) {
+  sim_phi_0_2_draws %>% 
+    group_by(model, variable_tex) %>% 
+    filter(as.integer(variable_tex) == n) %>% 
+    arrange(desc(quant_50)) %>% 
+    mutate(index = 1:n()) %>% 
+    ungroup() %>% 
+    mutate(model = factor(model, levels = c("stglmm_params_quantiles", "glm_params_quantiles"))) %>% 
+    ggplot() +
+    geom_boxplot(aes(x = index,
+                     ymin = quant_05,
+                     lower = quant_25,
+                     middle = quant_50,
+                     upper = quant_75,
+                     ymax = quant_95,
+                     group = index,
+                     fill = model),
+                 color = "grey30",
+                 stat = "identity") +
+    facet_wrap(~model, labeller = labeller(model = c(stglmm_params_quantiles = "STGLMM",
+                                                     glm_params_quantiles = "GLM")),
+               ncol = 1) +
+    geom_hline(yintercept = truth) +
+    theme_minimal() +
+    scale_fill_manual(values = rev(darjeeling)) +
+    annotate("text", label = TeX(glue("True $\\beta_{n}$")), x = 110, y = truth) +
+    coord_cartesian(xlim = c(0, 100), clip = "off") +
+    theme(legend.position = "none",
+          plot.margin = unit(c(1,3,1,1), "lines")) +
+    labs(x = "Simulation",
+         y = "Parameter Estimate")
+}
+
+plot_quantiles(4, -1)
+```
+
+Make table of coverage
+
+```{r}
+truth_table <- tibble(variable = c("beta_0", "beta_1", "beta_2", "beta_3", "phi_sp", "phi_tm", "sigma2_sp", "sigma2_tm"),
+                      truth = c(1,1,1,-1,0.2,0.2,1,1))
+
+sim_phi_0_2_draws %>% 
+  left_join(truth_table, by = "variable") %>% 
+  mutate(in_ci_50 = quant_25 < truth & truth < quant_75,
+         in_ci_90 = quant_05 < truth & truth < quant_95) %>% 
+  group_by(variable, model) %>% 
+  summarize(prop_in_ci_50 = mean(in_ci_50),
+            prop_in_ci_90 = mean(in_ci_90))
 ```
 
 
