@@ -4,12 +4,21 @@ library(glue)
 library(rstanarm)
 library(rsrHonors)
 library(MASS)
+library(dplyr)
+library(parallel)
+library(foreach)
+library(doParallel)
+
 
 # simulate data
 set.seed(451)
 
+numCores <- detectCores()
 
-for(i in 1:2) {
+registerDoParallel(numCores-1)
+run_sims <- function(phi) {
+start_time <- Sys.time()
+sim_runs <- foreach (i = 1:100, .verbose = T) %dopar% {
   ##############################################
   # Simulate Data
   ##############################################
@@ -18,10 +27,10 @@ for(i in 1:2) {
 
 
   nu <- 2.5
-  sigma2_sp <- 3
+  sigma2_sp <- 1
   sigma2_tm <- 1
-  phi_sp <- 0.2
-  phi_tm <- 0.2
+  phi_sp <- phi
+  phi_tm <- phi
   tau2 <- 0.1
 
   x1 <- rep(runif(n_s), times = n_t)
@@ -74,7 +83,8 @@ for(i in 1:2) {
   my_start_time_stan <- Sys.time()
   simulated_glm_negbin <- stan_glm(y_pois ~ x3 + x4 + x5,
                                    data = sim_data,
-                                   family = neg_binomial_2(), iter = 5000, chains = 2)
+                                   family = neg_binomial_2(), iter = 5000, chains = 2,
+                                   refresh = 0)
   my_end_time_stan <- Sys.time()
   simulated_glm_negbin_draws <- as.matrix(simulated_glm_negbin)
 
@@ -83,7 +93,6 @@ for(i in 1:2) {
 
 
 
-  write.csv(glm_params_quantiles, glue("simulations/glm_params_quantiles_{i}.csv"))
 
   ################################################################
   # Fit STGLMM
@@ -109,8 +118,8 @@ for(i in 1:2) {
     priors = list("beta.normal" = 100, # variance of beta prior
                   "s2_sp_IG" = c(2,2), # inverse gamma params
                   "s2_tm_IG" = c(2,2),
-                  "phi_sp_unif" = c(0.01, 1),
-                  "phi_tm_unif" = c(0.01, 1)), # uniform prior on phi
+                  "phi_sp_unif" = c(0.01, 1.5),
+                  "phi_tm_unif" = c(0.01, 1.5)), # uniform prior on phi
     tuning = list("beta" = c(sqrt(diag(vcov(linmod)))[2]/4, sqrt(diag(vcov(linmod)))[2:4]),
                   "s2_sp" = 1.5,
                   "phi_sp" = 0.02,
@@ -135,9 +144,19 @@ for(i in 1:2) {
     mutate(variable = c("beta_0", "beta_1", "beta_2", "beta_3",
                         "sigma2_sp", "sigma2_tm",
                         "phi_sp", "phi_tm"))
+  
 
-
-  i = 1
-  write.csv(stglmm_params_quantiles, glue("simulations/stglmm_params_quantiles_{i}.csv"))
-
+  list(glm_params_quantiles = glm_params_quantiles,
+       stglmm_params_quantiles = stglmm_params_quantiles)
+  
 }
+end_time <- Sys.time()
+
+end_time - start_time
+
+save(sim_runs, file = glue("simulations/simulations_phi_{phi}.RData"))
+}
+
+run_sims(0.2)
+run_sims(0.5)
+run_sims(1)
