@@ -493,28 +493,36 @@ make_coverage_table <- function(sim_table, phi) {
               prop_in_ci_90 = mean(in_ci_90))
 }
 
-map2(sim_table_list, c(0.2, 0.5, 1.0), make_coverage_table)
+map2(sim_table_list, c(0.2, 0.5, 1.0), 
+     ~{make_coverage_table(.x, .y) %>% 
+         ungroup() %>%  
+         dplyr::select(-variable_tex) %>% 
+         pivot_longer(starts_with("prop"), names_to = "ci", values_to = "prop") %>% 
+         pivot_wider(names_from = variable, values_from = prop)
+       })
 
 temp_cov_table <- make_coverage_table(sim_table_list[[1]], 0.2)
 
-temp_cov_table %>% 
-  ggplot(aes(x = prop_in_ci_50, y = variable, fill = model)) +
-  geom_col(position = "dodge") +
-  theme_minimal() +
-  scale_fill_manual(values = darjeeling, labels = c("GLM", "STGLMM")) +
-  geom_vline(xintercept = 0.5) +
-  scale_y_discrete(labels = c("beta_0" = parse(text = TeX("$\\beta_0$")),
-                              "beta_1" = parse(text = TeX("$\\beta_1$")),
-                              "beta_2" = parse(text = TeX("$\\beta_2$")),
-                              "beta_3" = parse(text = TeX("$\\beta_3$")),
-                              "phi_sp" = parse(text = TeX("$\\phi$")),
-                              "phi_tm" = parse(text = TeX("$\\psi$")),
-                              "sigma2_sp" = parse(text = TeX("$\\sigma^2$")),
-                              "sigma2_tm" = parse(text = TeX("$\\theta^2$")))) +
-  labs(x = "Proportion the True Parameter Value is in the 50% CI",
-       y = NULL,
-       fill = "Model:") + 
-  theme(legend.position = "bottom")
+
+# 
+# temp_cov_table %>% 
+#   ggplot(aes(x = prop_in_ci_50, y = variable, fill = model)) +
+#   geom_col(position = "dodge") +
+#   theme_minimal() +
+#   scale_fill_manual(values = darjeeling, labels = c("GLM", "STGLMM")) +
+#   geom_vline(xintercept = 0.5) +
+#   scale_y_discrete(labels = c("beta_0" = parse(text = TeX("$\\beta_0$")),
+#                               "beta_1" = parse(text = TeX("$\\beta_1$")),
+#                               "beta_2" = parse(text = TeX("$\\beta_2$")),
+#                               "beta_3" = parse(text = TeX("$\\beta_3$")),
+#                               "phi_sp" = parse(text = TeX("$\\phi$")),
+#                               "phi_tm" = parse(text = TeX("$\\psi$")),
+#                               "sigma2_sp" = parse(text = TeX("$\\sigma^2$")),
+#                               "sigma2_tm" = parse(text = TeX("$\\theta^2$")))) +
+#   labs(x = "Proportion the True Parameter Value is in the 50% CI",
+#        y = NULL,
+#        fill = "Model:") + 
+#   theme(legend.position = "bottom")
 ```
 
 
