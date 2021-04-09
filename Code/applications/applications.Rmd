@@ -13,8 +13,6 @@ library(dplyr)
 library(ggplot2)
 library(rstanarm)
 library(sf)
-library(patchwork)
-library(rnaturalearth)
 library(latex2exp)
 library(MASS)
 library(ggridges)
@@ -186,6 +184,9 @@ simulated_glm_negbin <- stan_glm(y_pois ~ x3 + x4 + x5,
          data = sim_data, 
          family = neg_binomial_2(), iter = 5000, chains = 2)
 save(simulated_glm_negbin, file = "simulated_glm-negbin-3_24_12_54.RData")
+
+
+ggsave("figures/markov-chains/sim_glm.png", mcmc_trace(simulated_glm_negbin), width = 8, height = 6)
 ```
 
 ```{r}
@@ -212,47 +213,52 @@ ggsave("figures/3-24_sim-glm-negbin-ppc.png", sim_glm_negbin_ppc, width = 8, hei
 
 ### Fit STGLMM
 ```{r}
+set.seed(451)
+
 linmod_nb <- glm.nb(y_pois ~ x3 + x4 + x5, data = sim_data)
 
 linmod <- glm(y_pois ~ x3 + x4 + x5, data = sim_data, family=poisson(link="log")) # find starting values
 
 
-simulated_stglmm <- stglmm(
-  fixed = y_pois ~ x3 + x4 + x5,
-  data = sim_data,
-  locations = locations,
-  times = time,
-  family = poisson(),
-  covfn = 2.5,
-  iter = 50000,
-  chains = 2,
-  cores = 1,
-  param_start = list("beta" = linmod$coefficients,
-                     "s2_sp" = 3,
-                     "phi_sp" = 0.5,
-                     "s2_tm" = 1,
-                     "phi_tm" = 0.5),
-  priors = list("beta.normal" = 100, # variance of beta prior
-                "s2_sp_IG" = c(2,2), # inverse gamma params
-                "s2_tm_IG" = c(2,2),
-                "phi_sp_unif" = c(0.01, 1),
-                "phi_tm_unif" = c(0.01, 1)), # uniform prior on phi
-  tuning = list("beta" = c(0.03, sqrt(diag(vcov(linmod)))[2:4]),
-                "s2_sp" = 1.5,
-                "phi_sp" = 0.02,
-                "s2_tm" = 1.5,
-                "phi_tm" = 0.01,
-                "delta" = 0.03,
-                "alpha" = 0.02),
-  nu = nu,
-  rank_sp = 50,
-  rank_tm = 10)
+my_time_start <- Sys.time()
+  simulated_stglmm <- stglmm(
+    fixed = y_pois ~ x3 + x4 + x5,
+    data = sim_data,
+    locations = locations,
+    times = time,
+    family = poisson(),
+    covfn = 2.5,
+    iter = 30000,
+    chains = 2,
+    cores = 1,
+    param_start = list("beta" = linmod$coefficients,
+                       "s2_sp" = 3,
+                       "phi_sp" = 0.5,
+                       "s2_tm" = 1,
+                       "phi_tm" = 0.5),
+    priors = list("beta.normal" = 100, # variance of beta prior
+                  "s2_sp_IG" = c(2,2), # inverse gamma params
+                  "s2_tm_IG" = c(2,2),
+                  "phi_sp_unif" = c(0.01, 1.5),
+                  "phi_tm_unif" = c(0.01, 1.5)), # uniform prior on phi
+    tuning = list("beta" = c(sqrt(diag(vcov(linmod)))[2]/4, sqrt(diag(vcov(linmod)))[2:4]),
+                  "s2_sp" = 1.5,
+                  "phi_sp" = 0.02,
+                  "s2_tm" = 1.5,
+                  "phi_tm" = 0.01,
+                  "delta" = 0.03,
+                  "alpha" = 0.02),
+    nu = nu,
+    rank_sp = 50,
+    rank_tm = 10)
+  my_time_end <- Sys.time()
 
-save(simulated_stglmm, file = "simulated_stglmm-3_24_10_54.RData")
+
+save(simulated_stglmm, file = "simulated_stglmm-4_09.RData")
 ```
 
 ```{r}
-load("simulated_stglmm-3_23_11_54.RData")
+load("simulated_stglmm-3_24_10_54.RData")
 ```
 
 
@@ -260,25 +266,45 @@ load("simulated_stglmm-3_23_11_54.RData")
 
 ```{r}
 simulated_stglmm$accepts
-mcmc_trace(simulated_stglmm$samples,
-           regex_pars = "beta.*" )
+(sim_stglmm_beta_trace <- mcmc_trace(simulated_stglmm$samples,
+           regex_pars = "beta.*" ))
+
+ggsave("figures/markov-chains/sim_stglmm_beta.png", sim_stglmm_beta_trace, width = 8, height = 6)
+
 
 mcmc_trace(simulated_stglmm$samples,
            regex_pars = "sigma.*" )
 
-mcmc_trace(simulated_stglmm$samples,
-           regex_pars = "phi.*" )
 
-mcmc_trace(simulated_stglmm$samples,
-           regex_pars = "delta_1" )
+(sim_stglmm_hyper_trace <- mcmc_trace(simulated_stglmm$samples,
+           regex_pars = "(sigma.*)|(phi.*)"))
 
-mcmc_trace(simulated_stglmm$samples,
-           regex_pars = "alpha_1" )
+ggsave("figures/markov-chains/sim_stglmm_hyper.png", sim_stglmm_hyper_trace, width = 8, height = 6)
 
-mcmc_trace(simulated_stglmm$samples,
-           pars = c("delta_1", "delta_2", "delta_3", "delta_4"))
-mcmc_trace(simulated_stglmm$samples,
-           pars = c("alpha_1", "alpha_2", "alpha_3", "alpha_4"))
+
+
+
+(sim_stglmm_hyper_trace <- mcmc_trace(simulated_stglmm$samples,
+           regex_pars = "(sigma.*)|(phi.*)" ))
+
+ggsave("figures/markov-chains/sim_stglmm_hyper.png", sim_stglmm_hyper_trace, width = 8, height = 6)
+
+(sim_stglmm_delta_trace_1 <- mcmc_trace(simulated_stglmm$samples,
+           regex_pars = "delta_(([1]{0,1}[0-9]\\b)|(2[0-5]\\b))" ))
+
+ggsave("figures/markov-chains/sim_stglmm_delta_1.png", sim_stglmm_delta_trace_1, width = 8, height = 6)
+
+(sim_stglmm_delta_trace_2 <- mcmc_trace(simulated_stglmm$samples,
+           regex_pars = "delta_(([345][0-9]\\b)|(2[6-9]\\b))" ))
+
+ggsave("figures/markov-chains/sim_stglmm_delta_2.png", sim_stglmm_delta_trace_2, width = 8, height = 6)
+
+(sim_stglmm_alpha_trace <- mcmc_trace(simulated_stglmm$samples,
+           regex_pars = "alpha_.*" ))
+
+ggsave("figures/markov-chains/sim_stglmm_alpha.png", sim_stglmm_alpha_trace, width = 8, height = 6)
+
+
 ```
 
 Simulation study has a different meaning, do it for 1000 times or so and check for each of those 1 thousand. 
@@ -573,7 +599,8 @@ model_data <- carolina_wren_sp %>%
   filter(Year >= start, Year <= end) %>% 
   group_by(statenum, Route) %>% 
   filter(n() == end - start + 1) %>% 
-  ungroup()
+  ungroup() %>% 
+  mutate(times_norm = (Year - min(Year))/20)
 ```
 
 ### Map Data
@@ -655,12 +682,14 @@ ggsave("figures/03-19_map-1991.png", map_2010, width = 8, height = 6)
 
 ```{r}
 set.seed(451)
-bird_glm <- stan_glm(SpeciesTotal ~ Stratum, 
-         data = model_data, 
-         family = poisson(), iter = 10000, chains = 2)
-
-save(bird_glm, "bird_glm.RData")
+bird_glm <- stan_glm.nb(SpeciesTotal ~ Stratum, 
+         data = model_data, iter = 10000, chains = 2)
+getwd()
+save(bird_glm, file = "bird_glm_nb.RData")
 ```
+
+
+
 ```{r}
 load("bird_glm.RData")
 ```
@@ -671,18 +700,21 @@ load("bird_glm.RData")
 ```{r}
 
 mcmc_trace(bird_glm)
+
+ggsave("figures/markov-chains/bird_glm.png", mcmc_trace(bird_glm), width = 8, height = 6)
 ```
 
 ```{r}
 bird_glm_predictions <- posterior_predict(bird_glm)
 
-bird_glm_ppc <- ppc_dens_overlay(model_data$SpeciesTotal, bird_glm_predictions)
+bird_glm_ppc <- ppc_dens_overlay(model_data$SpeciesTotal, bird_glm_predictions) +
+  lims(x = c(0, 150)) +
+  theme_minimal()
 
 bird_glm_ppc
 
-save(bird_glm, file = "bird_glm.Rdata")
 
-ggsave("figures/3-19_bird-glm-ppc.png", bird_glm_ppc, width = 8, height = 6)
+ggsave("figures/4-7_bird-glm-nb-ppc.png", bird_glm_ppc, width = 8, height = 6)
 ```
 
 Look at variable distributions of Stratum3: 
@@ -716,10 +748,10 @@ bird_stglmm <- stglmm(
   fixed = SpeciesTotal ~ Stratum,
   data = model_data,
   locations = locations,
-  times = unique(model_data$Year),
+  times = unique(model_data$Year), #normalize to 0 and 1 so psi doesnt have to be crazy
   family = poisson(),
   covfn = 2.5,
-  iter = 10000,
+  iter = 30000,
   chains = 2,
   cores = 1,
   param_start = list("beta" = linmod$coefficients,
@@ -732,7 +764,7 @@ bird_stglmm <- stglmm(
                 "s2_tm_IG" = c(2,2),
                 "phi_sp_unif" = c(0.01, 1.5),
                 "phi_tm_unif" = c(0.01, 1.5)), # uniform prior on phi
-  tuning = list("beta" = c(sqrt(diag(vcov(linmod))))/2,
+  tuning = list("beta" = c(sqrt(diag(vcov(linmod)))/2),
                 "s2_sp" = 0.1,
                 "phi_sp" = 0.05,
                 "s2_tm" = 0.4,
@@ -755,25 +787,26 @@ load("bird_stglmm.RData")
 bird_stglmm$acceptw
 
 bird_stglmm$accepts
-mcmc_trace(bird_stglmm$samples,
-           regex_pars = "beta_[0-5]\\b" )
+(bird_stglmm_beta_trace <- mcmc_trace(bird_stglmm$samples,
+           regex_pars = "beta_[0-9]+\\b" ))
 
-mcmc_trace(bird_stglmm$samples,
-           regex_pars = "sigma.*" )
+ggsave("figures/markov-chains/bird_stglmm_beta.png", bird_stglmm_beta_trace, width = 8, height = 6)
 
-mcmc_trace(bird_stglmm$samples,
-           regex_pars = "phi.*" )
+bird_stglmm_hyper_trace <- mcmc_trace(bird_stglmm$samples,
+           regex_pars = "(sigma.*)|(phi.*)" )
 
-mcmc_trace(bird_stglmm$samples,
-           regex_pars = "delta_1" )
+ggsave("figures/markov-chains/bird_stglmm_hyper.png", bird_stglmm_hyper_trace, width = 8, height = 6)
 
-mcmc_trace(bird_stglmm$samples,
-           regex_pars = "alpha_1" )
 
-mcmc_trace(bird_stglmm$samples,
-           pars = c("delta_1", "delta_2", "delta_3", "delta_4"))
-mcmc_trace(bird_stglmm$samples,
-           pars = c("alpha_1", "alpha_2", "alpha_3", "alpha_4"))
+(bird_stglmm_delta_trace_2 <- mcmc_trace(bird_stglmm$samples,
+           regex_pars = "delta_(([345][0-9]\\b)|(2[6-9]\\b))" ))
+
+ggsave("figures/markov-chains/bird_stglmm_delta_2.png", bird_stglmm_delta_trace_2, width = 8, height = 6)
+
+(bird_stglmm_alpha_trace <- mcmc_trace(bird_stglmm$samples,
+           regex_pars = "alpha_.*" ))
+
+ggsave("figures/markov-chains/bird_stglmm_alpha.png", bird_stglmm_alpha_trace, width = 8, height = 6)
 ```
 
 ```{r}
@@ -797,10 +830,10 @@ posterior_predictions <- as.vector(bird_stglmm$samples[,,"beta_0"] + bird_stglmm
 
 
 predict_stglmm <- function(location_index, Stratum_index, time_index) {
-  mean_pred <- as.vector(bird_stglmm$samples[5001:10000,,"beta_0"] +
-              bird_stglmm$samples[5001:10000,,glue("beta_{Stratum_index}")] +
-              bird_stglmm$samples[5001:10000,,glue("w_{location_index}")] +
-              bird_stglmm$samples[5001:10000,,glue("v_{time_index}")])
+  mean_pred <- as.vector(bird_stglmm$samples[28000:30000,,"beta_0"] +
+              bird_stglmm$samples[28000:30000,,glue("beta_{Stratum_index}")] +
+              bird_stglmm$samples[28000:30000,,glue("w_{location_index}")] +
+              bird_stglmm$samples[28000:30000,,glue("v_{time_index}")])
   
   rpois(length(mean_pred), exp(mean_pred))
 }
@@ -818,7 +851,7 @@ bird_stglmm_ppc <- ppc_dens_overlay(model_data$SpeciesTotal, posterior_predictio
 
 bird_stglmm_ppc
 
-ggsave("figures/3-23_bird-stglmm-ppc.png", bird_stglmm_ppc, width = 8, height = 6)
+ggsave("figures/4-09_bird-stglmm-ppc.png", bird_stglmm_ppc, width = 8, height = 6)
 ```
 
 Lets look at Stratum3 for this version too
